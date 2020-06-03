@@ -1,0 +1,6 @@
+	g++ -I ~/Desktop/project/BitNest/core/pkg -c uint256/uint128_t.h -o debug/uint128_t.h.gch
+	g++ -I ~/Desktop/project/BitNest/core/pkg -c uint256/uint128_t.cpp -o debug/uint128_t.o
+	g++ -I ~/Desktop/project/BitNest/core/pkg -c uint256/uint256_t.h -o debug/uint256_t.h.gch
+	g++ -I ~/Desktop/project/BitNest/core/pkg -c uint256/uint256_t.cpp -o debug/uint256_t.o
+    g++ -I ~/Desktop/project/BitNest/core/pkg -c uint256/test_uint256.h -o debug/test_uint256_t.h.gch
+	g++ -I ~/Desktop/project/BitNest/core/pkg -c uint256/test_uint256.cpp -o debug/test_uint256.o
