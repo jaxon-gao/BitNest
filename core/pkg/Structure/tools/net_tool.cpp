@@ -147,4 +147,21 @@ void recv_content(int sockfd, string &m)
         m += buffer[index++];
     }
 }
+
+StorageData *recv_file(int fd)
+{
+}
+bool send_file(int fd, StorageData *d)
+{
+}
+
+//将文件块发送至套接字
+bool send_fblock(int fd, FileBlock *d)
+{
+}
+
+//从文件描述符接收文件块
+FileBlock *recv_fblock(int fd)
+{
+}
 #endif
