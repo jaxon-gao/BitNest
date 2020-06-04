@@ -11,4 +11,4 @@ public:
   string path;
   FileBlock *content;
   int size;
-}
+};

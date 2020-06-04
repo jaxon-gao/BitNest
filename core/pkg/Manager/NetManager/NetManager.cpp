@@ -446,6 +446,7 @@ void NetManager::deamon()
   pthread_create(&threads[2], 0, mdns_callback, NULL);
   pthread_create(&threads[3], 0, accept_callback, NULL);
   pthread_create(&threads[4], 0, reciever_callback, NULL);
+  while(1);
 }
 
 void *NetManager::service_net(void *args)
@@ -546,6 +547,7 @@ void NetManager::Emit(msg_header &h, string msg)
     }
   }
 }
+
 void NetManager::Emit(PoST *p)
 {
   string data = p->data();

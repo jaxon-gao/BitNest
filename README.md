@@ -7,7 +7,8 @@
 
 
 # TODO
+- simplify mDNS return less record
 - build the file exchange protocol
-- build the multicast module
-- build the random connect
-- use self customed network connection
+- build the new NetManager based on multicast
+- alther the connection way to connect random peer
+- use self customed network connection rather than TCP to decrease resources pay
