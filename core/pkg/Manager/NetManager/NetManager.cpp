@@ -27,7 +27,7 @@ using namespace std;
 #define MAXLINE 1024
 #define PORT 6000
 #define MAXBACK 1000
-
+#define FILE_PORT 6001
 NetManager::NetManager(PeerInfo *seed)
 {
     //创建epoll
@@ -401,6 +401,8 @@ void *NetManager::service_accept(void *arg)
                 send_msg(evs[i].data.fd, header, "");
                 DHT->AddNode(connectPeer);
                 cout << "new connection:" << hex << PeerHash << endl;
+                //增加监听限制。
+                //目前的监听限制在DHT和Union中保护
                 epoll_ctl(NetManager::epoll_in, EPOLL_CTL_ADD, evs[i].data.fd, &ev); //!> 计入FD
 
                 epoll_ctl(NetManager::epoll_acc_fd, EPOLL_CTL_DEL, evs[i].data.fd, &ev); //!> 删除计入的fd
@@ -607,7 +609,17 @@ void NetManager::Emit(Storage *c)
     h.pk[1] = keys->pk[1];
     Emit(h, data);
 }
-
+stirng get_ip_from_fd(int fd)
+{
+    struct sockaddr_in sa;
+    int len = sizeof(sa);
+    string ans = "";
+    if (!getpeername(sockfd, (struct sockaddr *)&sa, &len))
+    {
+        ans = string(inet_ntoa(sa.sin_addr))
+    }
+    return ans;
+}
 void *NetManager::service_union(void *args)
 {
     Union->service_union(args);
@@ -615,7 +627,33 @@ void *NetManager::service_union(void *args)
 
 StorageData *NetManager::FileReciever(PeerInfo *p)
 {
+    string ip = get_ip_from_fd(p->fd());
+    if (ip.size() == 0)
+    {
+        return NULL;
+    }
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int cli_sock;
+    sockaddr_in serv_addr;
+    sockaddr_in cli_addr;
+    socklen_t len = sizeof(cli_addr);
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(FILE_PORT);
+    serv_addr.sin_addr.s_addr = inet_addr(ip.c_str());
+
+    bind(sock, (sockaddr *)&serv_addr, sizeof(sockaddr));
+    listen(sock, 3);
+    cli_sock = accept(sock, (sockaddr *)&cli_addr, &len);
 }
 void NetManager::FileSender(PeerInfo *p, const StorageData &file)
 {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int ser_sock;
+    sockaddr_in my_addr;
+    sockaddr_in ser_addr;
+    socklen_t len = sizeof(cli_addr);
+    my_addr.sin_family = AF_INET;
+    my_addr.sin_port = htons(FILE_PORT);
+    my_addr.sin_addr.s_addr = inet_addr(ip.c_str());
+    ser_sock = connect(sock, (sockaddr *)&ser_addr, &len);
 }
