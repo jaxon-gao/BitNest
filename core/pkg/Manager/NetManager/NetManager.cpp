@@ -27,6 +27,7 @@ using namespace std;
 #define MAXLINE 1024
 #define PORT 6000
 #define MAXBACK 1000
+
 NetManager::NetManager(PeerInfo *seed)
 {
   //创建epoll
@@ -146,7 +147,7 @@ bool NetManager::sendPBFT(string msg)
 void *NetManager::reciver(void *args)
 {
   msg_header m;
-  int listener = listen_serve();
+  int listener = listen_fd;
   while (1)
   {
     recv_header(listener, m);
@@ -274,11 +275,11 @@ void NetManager::discovery()
     iter++;
   }
 }
+//使用种子对节点初始化
 void NetManager::discovery(PeerInfo *p)
 {
 }
-//P2P服务
-void NetManager::service_accept()
+void *NetManager::service_accept(void * arg)
 {
   msg_header header;
   int conn_fd, nread;
@@ -313,7 +314,7 @@ void NetManager::service_accept()
   servaddr.sin_port = htons(PORT);
 
   //!> 建立套接字
-  if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+  if ((NetManager::listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
   {
     printf("Socket Error...\n", errno);
     exit(EXIT_FAILURE);
@@ -321,7 +322,7 @@ void NetManager::service_accept()
 
   //!> 设置非阻塞模式
   //!>
-  if (setnonblocking(listen_fd) == -1)
+  if (setnonblocking(NetManager::listen_fd) == -1)
   {
     printf("Setnonblocking Error : %d\n", errno);
     exit(EXIT_FAILURE);
@@ -329,7 +330,7 @@ void NetManager::service_accept()
 
   //!> 绑定
   //!>
-  if (bind(listen_fd, (struct sockaddr *)&servaddr, sizeof(struct sockaddr)) == -1)
+  if (bind(NetManager::listen_fd, (struct sockaddr *)&servaddr, sizeof(struct sockaddr)) == -1)
   {
     printf("Bind Error : %d\n", errno);
     exit(EXIT_FAILURE);
@@ -337,7 +338,7 @@ void NetManager::service_accept()
 
   //!> 监听
   //!>
-  if (listen(listen_fd, MAXBACK) == -1)
+  if (listen(NetManager::listen_fd, MAXBACK) == -1)
   {
     printf("Listen Error : %d\n", errno);
     exit(EXIT_FAILURE);
@@ -346,18 +347,18 @@ void NetManager::service_accept()
   //!> 创建epoll
   //!>
 
-  ev.events = EPOLLIN | EPOLLET; //!> accept Read!
-  ev.data.fd = listen_fd;        //!> 将listen_fd 加入
-  if (epoll_ctl(epoll_acc_fd, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
+  ev.events = EPOLLIN | EPOLLET;      //!> accept Read!
+  ev.data.fd = NetManager::listen_fd; //!> 将listen_fd 加入
+  if (epoll_ctl(NetManager::epoll_acc_fd, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
   {
     printf("Epoll Error : %d\n", errno);
     exit(EXIT_FAILURE);
   }
-  acc_cur_fds = 1;
+  NetManager::acc_cur_fds = 1;
 
   while (1)
   {
-    if ((wait_fds = epoll_wait(epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
+    if ((wait_fds = epoll_wait(NetManager::epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
     {
       printf("Epoll Wait Error : %d\n", errno);
       exit(EXIT_FAILURE);
@@ -373,7 +374,7 @@ void NetManager::service_accept()
         }
         ev.events = EPOLLIN | EPOLLET; //!> accept Read!
         ev.data.fd = conn_fd;          //!> 将conn_fd 加入
-        if (epoll_ctl(epoll_acc_fd, EPOLL_CTL_ADD, conn_fd, &ev) < 0)
+        if (epoll_ctl(NetManager::epoll_acc_fd, EPOLL_CTL_ADD, conn_fd, &ev) < 0)
         {
           printf("Epoll Error : %d\n", errno);
           exit(EXIT_FAILURE);
@@ -392,14 +393,14 @@ void NetManager::service_accept()
         connectPeer = new PeerInfo(PeerHash, evs[i].data.fd);
         connectPeer->pk[0] = header.pk[0];
         connectPeer->pk[1] = header.pk[1];
-        header.pk[0] = keys->pk[0];
-        header.pk[1] = keys->pk[1];
+        header.pk[0] = NetManager::keys->pk[0];
+        header.pk[1] = NetManager::keys->pk[1];
         header.kind = DHT_CONNECT;
         header.msg_size = 0;
         send_msg(evs[i].data.fd, header, "");
         DHT->AddNode(connectPeer);
         cout << "new connection:" << hex << PeerHash << endl;
-        epoll_ctl(epoll_acc_fd, EPOLL_CTL_DEL, evs[i].data.fd, &ev); //!> 删除计入的fd
+        epoll_ctl(NetManager::epoll_acc_fd, EPOLL_CTL_DEL, evs[i].data.fd, &ev); //!> 删除计入的fd
         --acc_cur_fds;
       }
     }
@@ -407,39 +408,44 @@ void NetManager::service_accept()
   close(listen_fd);
 }
 
-void NetManager::service_nmdns()
+void *NetManager::service_nmdns(void *arg)
 {
   int service_port = 42424;
   int ret;
-#ifdef _WIN32
-  WORD versionWanted = MAKEWORD(1, 1);
-  WSADATA wsaData;
-  if (WSAStartup(versionWanted, &wsaData))
-  {
-    printf("Failed to initialize WinSock\n");
-    return -1;
-  }
-#endif
   ret = service_mdns(hostname.c_str(), service.c_str(), service_port);
-#ifdef _WIN32
-  WSACleanup();
-#endif
-  return;
+}
+
+NetManager *callback_n;
+void *union_callback(void *arg)
+{
+  callback_n->service_union(arg);
+}
+void *net_callback(void  *arg)
+{
+  callback_n->service_net(arg);
+}
+void *mdns_callback(void *arg)
+{
+  callback_n->service_nmdns(arg);
+}
+void *accept_callback(void *arg)
+{
+  callback_n->service_accept(arg);
+}
+void *reciever_callback(void *arg)
+{
+  callback_n->service_accept(arg);
 }
 
 void NetManager::deamon()
-{
-  pthread_t UServe;
-  //开启联盟选举线程
-  pthread_create(&UServe, 0, Union->service_union, NULL);
-  //网络管理器线程
-  pthread_create(&UServe, 0, this->service_net, NULL);
-  //接受连接线程
-  pthread_create(&UServe, 0, this->service_accept, NULL);
-  //多播DNS线程
-  pthread_create(&UServe, 0, this->service_nmdns, NULL);
-  //接收处理消息
-  pthread_create(&UServe, 0, this->reciever, NULL);
+{ 
+  callback_n=this;
+  pthread_t threads[5];
+  pthread_create(&threads[0], 0, union_callback, NULL);
+  pthread_create(&threads[1], 0, net_callback, NULL);
+  pthread_create(&threads[2], 0, mdns_callback, NULL);
+  pthread_create(&threads[3], 0, accept_callback, NULL);
+  pthread_create(&threads[4], 0, reciever_callback, NULL);
 }
 
 void *NetManager::service_net(void *args)
@@ -449,32 +455,153 @@ void *NetManager::service_net(void *args)
     sleep(1);
     if (Union->isUnionLeader())
     {
-      publicBlock *b = Union->packUp_u();
+      publicBlock *b = Blocks->packUp_u();
       //发送联盟区块。
       Emit(b);
     }
     if (time(0) % 45 == 5)
     {
-      sync_contract();
-      innerBlock *b = Union->packUp();
+      //sync_contract();
+      innerBlock *b = Blocks->packUp();
       Emit(b);
     }
   }
 }
 
-void NetManager::Emit(msg_header &h, string msg)
+void *NetManager::AddEventEmit(void *arg)
 {
   struct epoll_event ev;
-  struct epoll_event evs[MAXEPOLL];
-  ev.events = EPOLLOUT;
-  vector<PeerInfo *> ran = DNT->GetRandomNode();
+  ev.events = EPOLLOUT || EPOLLET;
+  int *args = (int *)arg;
+  int epoll = args[0];
+
+  //优先发送联盟全体
+  vector<PeerInfo *> ran = Union->getAll();
   for (int i = 0; i < ran.size(); i++)
   {
     ev.data.fd = ran[i]->fd();
-    if (epoll_ctl(epoll_acc_fd, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
+    lock_p(lock_out);
+    if (epoll_ctl(epoll, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
     {
       printf("Epoll Error : %d\n", errno);
       exit(EXIT_FAILURE);
     }
+    ++out_cur_fds;
+    lock_v(lock_out);
   }
+
+  //选择随机节点发送验证
+  ran = DHT->GetRandomNode();
+  for (int i = 0; i < ran.size(); i++)
+  {
+    ev.data.fd = ran[i]->fd();
+    lock_p(lock_out);
+    if (epoll_ctl(epoll, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
+    {
+      printf("Epoll Error : %d\n", errno);
+      exit(EXIT_FAILURE);
+    }
+    ++out_cur_fds;
+    lock_v(lock_out);
+  }
+}
+void * callback_add(void * arg){
+  callback_n->AddEventEmit(arg);
+}
+void NetManager::Emit(msg_header &h, string msg)
+{
+  struct epoll_event ev;
+  struct epoll_event evs[MAXEPOLL];
+  ev.events = EPOLLOUT || EPOLLET;
+  out_cur_fds = 0;
+  int epoll_emit = epoll_create(MAXEPOLL);
+  int args[2];
+  pthread_t add;
+  args[0] = epoll_emit;
+  pthread_create(&add, 0, callback_add, (void *)args);
+  time_t _1 = time(0);
+  time_t _2 = time(0);
+  int wait_fds;
+  while (1)
+  {
+    if ((wait_fds = epoll_wait(epoll_emit, evs, acc_cur_fds, -1)) == -1)
+    {
+      printf("Epoll Wait Error : %d\n", errno);
+      exit(EXIT_FAILURE);
+    }
+    for (int i = 0; i < wait_fds; i++)
+    {
+      send_msg(evs[i].data.fd, h, msg);
+
+      lock_p(lock_out);
+      epoll_ctl(epoll_emit, EPOLL_CTL_DEL, evs[i].data.fd, &ev);
+      out_cur_fds--;
+      lock_v(lock_out);
+    }
+    _2 = time(0);
+    //两秒后结束。
+    if (_2 - _1 == 2)
+    {
+      break;
+    }
+  }
+}
+void NetManager::Emit(PoST *p)
+{
+  string data = p->data();
+  msg_header h;
+  h.kind = NK_SEND_POST;
+  h.pk[0] = keys->pk[0];
+  h.pk[1] = keys->pk[1];
+  Emit(h, data);
+}
+void NetManager::Emit(publicBlock *b)
+{
+  string data = b->data();
+  msg_header h;
+  h.kind = NK_SEND_PB;
+  h.pk[0] = keys->pk[0];
+  h.pk[1] = keys->pk[1];
+  Emit(h, data);
+}
+void NetManager::Emit(innerBlock *b)
+{
+  string data = b->data();
+  msg_header h;
+  h.kind = NK_SEND_IB;
+  h.pk[0] = keys->pk[0];
+  h.pk[1] = keys->pk[1];
+  Emit(h, data);
+}
+void NetManager::Emit(BackUp *c)
+{
+  string data = c->data();
+  msg_header h;
+  h.kind = NK_SEND_BAK;
+  h.pk[0] = keys->pk[0];
+  h.pk[1] = keys->pk[1];
+  Emit(h, data);
+}
+void NetManager::Emit(payment *c)
+{
+  string data = c->data();
+  msg_header h;
+  h.kind = NK_SEND_PAY;
+  h.pk[0] = keys->pk[0];
+  h.pk[1] = keys->pk[1];
+  Emit(h, data);
+}
+void NetManager::Emit(Storage *c)
+{
+  string data = c->data();
+  msg_header h;
+  h.kind = NK_SEND_STO;
+  h.pk[0] = keys->pk[0];
+  h.pk[1] = keys->pk[1];
+  Emit(h, data);
+}
+
+
+void *NetManager::service_union(void *args){
+  Union->service_union(args);
 }

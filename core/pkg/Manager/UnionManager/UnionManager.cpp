@@ -3,7 +3,12 @@
 #include <hash/sha256.h>
 #include <time.h>
 #include <algorithm>
+#include <stdlib.h>
+#include <config.h>
+#include <unistd.h>
+#include <iomanip>
 UnionManager::UnionManager() {}
+UnionManager::UnionManager(KeyPair *k) {key=k;};
 bool UnionManager::Offline(PeerInfo *p)
 {
   //使用折半查找优化？
@@ -33,7 +38,7 @@ uint256 gethash(PeerInfo *p, time_t t)
   uint8_t hash_output[32];
   ss << hex << p->pk[0];
   ss << hex << p->pk[1];
-  ss << hex << p->hash;
+  ss << hex << p->hash();
   ss << hex << t;
   ss >> ans;
   sha256_init(&hash_cnt);
@@ -118,7 +123,7 @@ bool UnionManager::Depart()
       {
         Offline(UnionHash[i].peer);
       }
-      Election()
+      Election();
     }
   }
 }
@@ -136,7 +141,7 @@ void *UnionManager::service_union(void *args)
   }
 }
 
-bool UnionManager::UnionLeader()
+bool UnionManager::isUnionLeader()
 {
   if (my->hash() == leader->hash())
   {
@@ -148,12 +153,17 @@ bool UnionManager::UnionLeader()
 //TODO：使用折半查找优化
 bool UnionManager::HasNode(PeerInfo *p)
 {
-  for (int i = 0; i < peers.size(); i++)
+  for (int i = 0; i < connection.size(); i++)
   {
-    if (p->hash() == peers[i].size())
+    if (p->hash() == connection[i]->hash())
     {
       return true;
     }
   }
   return false;
+}
+
+vector<PeerInfo *> UnionManager::getAll()
+{
+  return connection;
 }

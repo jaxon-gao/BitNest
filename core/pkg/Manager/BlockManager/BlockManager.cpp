@@ -48,7 +48,7 @@
         sigs.push_back(p);
     }
 
-    innerBlock* BlockManager::PackUp(){
+    innerBlock* BlockManager::packUp(){
         innerBlock *b= new innerBlock();
         return b;
     }

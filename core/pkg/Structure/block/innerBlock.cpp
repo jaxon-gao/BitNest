@@ -113,6 +113,9 @@ using namespace std;
         string s = get("packer");
         return uint256(s);
     }
+    string innerBlock::data(){
+        return "";
+    }
     
 
 

@@ -6,12 +6,12 @@ using namespace std;
 NetManager nn;
 void* run_serv(void *args)
 {
-    nn.service_nmdns();
+    nn.service_nmdns(args);
     return 0;
 }
 void* run_accept(void *args)
 {
-    nn.service_accept();
+    nn.service_accept(args);
     return 0;
 }
 void* run_query(void *args)
@@ -27,8 +27,8 @@ bool test_net_manager(){
     //  pthread_create(&tids[0],NULL,run_serv,NULL);
     //  pthread_create(&tids[0],NULL,run_accept,NULL);
     //test query
-    pthread_create(&tids[0],NULL,run_query,NULL);
-    while(1);
+    //pthread_create(&tids[0],NULL,run_query,NULL);
+    //while(1);
     cout<<"test: NetManager test finished"<<endl;
     return true;
 }

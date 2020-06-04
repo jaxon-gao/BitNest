@@ -38,9 +38,18 @@
 #define NK_QUERY_PAY '1'
 #define NK_QUERY_STO '2'
 #define NK_QUERY_BAK '3'
-#define NK_QUERY_DIV '4'
+#define NK_QUERY_POST '4'
+#define NK_QUERY_IB '5'
+#define NK_QUERY_PB '6'
+
+#define NK_SEND_PAY '7'
+#define NK_SEND_STO '8'
+#define NK_SEND_BAK '9'
+#define NK_SEND_POST '0'
+#define NK_SEND_IB 'a'
+#define NK_SEND_PB 'b'
+
 //回复和错误
-#define NK_QUERY_REP '0'
 #define NK_QUERY_ERR '-'
 
 //nest message kind normal正常消息

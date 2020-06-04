@@ -29,12 +29,11 @@ private:
   //接收连接epoll
   int listen_fd, epoll_acc_fd, acc_cur_fds;
   //发送epoll
-  int epoll_out, out_cur_fds;
+  int epoll_out, out_cur_fds, lock_out;
   //接收epoll
   int epoll_in, in_curr_fds;
-
-public:
   //网络管理器入口
+public:
   void deamon();
 
   NetManager(PeerInfo *seed);
@@ -49,8 +48,10 @@ public:
   void *service_accept(void *args);
   void *service_nmdns(void *args);
   void *service_net(void *args);
+  void *service_union(void *args);
 
   //工具函数发送同步信息
+  void *AddEventEmit(void *arg);
   void Emit(PoST *p);
   void Emit(publicBlock *b);
   void Emit(innerBlock *b);
