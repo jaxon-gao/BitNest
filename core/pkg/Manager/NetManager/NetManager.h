@@ -16,11 +16,13 @@ private:
     DHTManager *DHT;
     BlockManager *Blocks;
     UnionManager *Union;
-    //用来监听收包的所有套接字
-    vector<int> conns;
+    //来自客户端的连接
+    vector<int> cli_fd;
     //服务方自己执行的存储合约
     map<uint256, Storage *> stores;
     map<uint256, BackUp *> backups;
+    //从这个队列中接收文件才保存
+    vector<PeerInfo *> files;
     //当前运行阶段 0: 运行 1：结算 2：选举 3：打包 4：签名
     int CurrEra;
     //哈希地址、密钥对
@@ -32,7 +34,7 @@ private:
     //发送epoll
     int epoll_out, out_cur_fds, lock_out;
     //接收epoll
-    int epoll_in, in_curr_fds;
+    int epoll_in;
     //网络管理器入口
 public:
     void deamon();
@@ -44,6 +46,7 @@ public:
     void discovery();
     void discovery(PeerInfo *p);
     //P2P服务
+    void *AddEventIn(void *arg);
     void *reciver(void *args);
     void *service_accept(void *args);
     void *service_nmdns(void *args);
@@ -58,10 +61,11 @@ public:
     void Emit(payment *c);
     void Emit(Storage *c);
     void Emit(msg_header &h, string msg);
-    //完成协商后的动作
-    StorageData *FileReciever(uint256 hash);
+    //文件传输
+    StorageData *FileReciever(PeerInfo *p);
     void FileSender(PeerInfo *p, const StorageData &file);
-    //开放新端口进行合同同步（组播）
+
+    //合同同步
     void contract_sync();
 };
 #endif

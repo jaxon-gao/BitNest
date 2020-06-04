@@ -14,14 +14,16 @@ class DHTManager
 private:
     map<uint256, Bucket *> buckets;
     PeerInfo *my;
+    int epoll_in;
 
 public:
-    DHTManager(uint256 hash);
+    DHTManager(uint256 hash, int e);
     void connect();
     void connect(PeerInfo *seed);
     bool AddNode(PeerInfo *p);
     bool OldNode(PeerInfo *p);
     bool DelNode(PeerInfo *p);
+    void EpollDel(PeerInfo *p);
     vector<PeerInfo *> Query(PeerInfo *p);
     vector<PeerInfo *> GetRandomNode();
     vector<PeerInfo *> GetAllNode();

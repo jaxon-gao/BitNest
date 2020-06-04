@@ -48,18 +48,20 @@
 #define NK_SEND_POST '0'
 #define NK_SEND_IB 'a'
 #define NK_SEND_PB 'b'
+#define NK_SEND_FILE 'c'
 
 //回复和错误
 #define NK_QUERY_ERR '-'
 
 //nest message kind normal正常消息
 #define NK_NORMAL 'n'
+
 struct msg_header
 {
-  char kind;
-  uint256 pk[2];
-  uint256 data[2];
-  int msg_size;
+    char kind;
+    uint256 pk[2];
+    uint256 data[2];
+    int msg_size;
 };
 
 #endif

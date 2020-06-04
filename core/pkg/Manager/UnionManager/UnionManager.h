@@ -8,25 +8,27 @@ using namespace std;
 class UnionManager
 {
 private:
-  vector<PeerInfo *> connection;
-  PeerInfo *leader;
-  PeerInfo *my;
-  KeyPair *key;
-  vector<uint256> UnionIDs;
-  time_t last;
+    vector<PeerInfo *> connection;
+    PeerInfo *leader;
+    PeerInfo *my;
+    KeyPair *key;
+    vector<uint256> UnionIDs;
+    time_t last;
+    int epoll_in;
 
 public:
-  UnionManager();
-  UnionManager(KeyPair *k);
-  bool Offline(PeerInfo *p);
-  bool AddNode(PeerInfo *p);
-  bool HasNode(PeerInfo *p);
-  PeerInfo *Election();
-  bool Depart();
-  bool Emit(const string &str);
-  void *service_union(void *args);
-  bool isUnionLeader();
-  void daemon();
-  vector<PeerInfo *> getAll();
+    UnionManager(int e);
+    UnionManager(KeyPair *k);
+    bool Offline(PeerInfo *p);
+    bool EpollDel(PeerInfo *p);
+    bool AddNode(PeerInfo *p);
+    bool HasNode(PeerInfo *p);
+    PeerInfo *Election();
+    bool Depart();
+    bool Emit(const string &str);
+    void *service_union(void *args);
+    bool isUnionLeader();
+    void daemon();
+    vector<PeerInfo *> getAll();
 };
 #endif

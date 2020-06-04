@@ -4,8 +4,9 @@
 #include <DHTManager/DHTManager.h>
 #include <vector>
 using namespace std;
-DHTManager::DHTManager(uint256 hash)
+DHTManager::DHTManager(uint256 hash, int e)
 {
+    epoll_in = e;
     my = new PeerInfo(hash, 0);
 }
 
@@ -97,4 +98,12 @@ bool DHTManager::OldNode(PeerInfo *p)
     {
         return false;
     }
+}
+
+void EpollDel(PeerInfo *p)
+{
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.fd = p->fd();
+    epoll_ctl(epoll_in, EPOLL_CTL_DEL, ev.data.fd, &ev);
 }
