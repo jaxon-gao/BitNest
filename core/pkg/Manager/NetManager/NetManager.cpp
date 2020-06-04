@@ -644,6 +644,7 @@ StorageData *NetManager::FileReciever(PeerInfo *p)
     bind(sock, (sockaddr *)&serv_addr, sizeof(sockaddr));
     listen(sock, 3);
     cli_sock = accept(sock, (sockaddr *)&cli_addr, &len);
+    //接收文件
 }
 void NetManager::FileSender(PeerInfo *p, const StorageData &file)
 {
@@ -656,4 +657,5 @@ void NetManager::FileSender(PeerInfo *p, const StorageData &file)
     my_addr.sin_port = htons(FILE_PORT);
     my_addr.sin_addr.s_addr = inet_addr(ip.c_str());
     ser_sock = connect(sock, (sockaddr *)&ser_addr, &len);
+    //上传文件
 }
