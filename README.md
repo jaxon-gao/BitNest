@@ -6,7 +6,7 @@
 - Development version use Sequential Search at almost everywhere that need to use search
 
 
-# Future TODO
+# TODO
 - build the file exchange protocol
 - build the multicast module
 - build the random connect
