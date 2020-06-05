@@ -17,6 +17,9 @@
 #include <sys/resource.h> /* 设置最大的连接数需要setrlimit */
 #include <iostream>
 #include <iomanip>
+#include <fstream>
+#include <FileSystem/StorageData.h>
+#include <FileSystem/FileBlock.h>
 using namespace std;
 int setnonblocking(int fd)
 {
@@ -150,18 +153,118 @@ void recv_content(int sockfd, string &m)
 
 StorageData *recv_file(int fd)
 {
+    uint8_t buff[64];
+    StorageData *ans = new StorageData;
+    recv(fd, buff, 32, 0);
+    stringstream ss;
+    string str;
+    for (int i = 0; i < 32; i++)
+    {
+        ss << setw(2) << setfill('0') << hex << (int)buff[i];
+    }
+    ss >> str;
+    ans->root_hash = uint256(str);
+    recv(fd, (void *)&ans->BlockNum, 4, 0);
+    int size;
+    recv(fd, (void *)&size, 4, 0);
+    FileBlock *tmp;
+    for (int i = 0; i < size; i++)
+    {
+        tmp = recv_fblock(fd);
+        ans->files.push_back(tmp);
+        IDs.insert(tmp->ID);
+    }
+    return ans;
 }
 bool send_file(int fd, StorageData *d)
 {
+    uint8_t buff[64];
+    vector<uint8_t> bits = d->root_hash.bits();
+    for (int i = 0; i < 32; i++)
+    {
+        buff[i] = bits[i];
+    }
+    int size = d->files.size();
+    sned(fd, buff, 32, 0);
+    send(fd, (void *)&d->BlockNum, 4, 0);
+    send(fd, (void *)&size, 4, 0);
+    for (int i = 0; i < size; i++)
+    {
+        send_fblock(d->files[i])
+    }
+    return true;
 }
 
 //将文件块发送至套接字
 bool send_fblock(int fd, FileBlock *d)
 {
+    //发送本块大小
+    uint8_t buff[1024];
+    send(fd, (void *)&d->size, 4, 0);
+
+    vector<uint8_t> bits = d->hash.bits();
+    for (int i = 0; i < 32; i++)
+    {
+        buff[i] = bits[i];
+    }
+    //发送哈希
+    send(fd, buff, 32, 0);
+
+    //发送ID和块总数量
+    send(fd, (void *)&d->ID, 4, 0);
+
+    ifstream ifs;
+    ifs.open(d->path.c_str());
+    int read;
+    while (1)
+    {
+        read = ifs.read(buff, 1024);
+        if (read <= 0)
+        {
+            break;
+        }
+        send(fd, buff, read, 0);
+    }
 }
 
 //从文件描述符接收文件块
 FileBlock *recv_fblock(int fd)
 {
+    //接收文件大小
+    uint8_t buff[1024];
+    FileBlock *ans = new FileBlock;
+    recv(fd, (void *)&ans->size, 4, 0);
+    recv(fd, (void *)buff, 32, 0);
+
+    //接收哈希，形成本地路径
+    stringstream ss;
+    string hash_str;
+    for (int i = 0; i < 32; i++)
+    {
+        ss << setw(2) << setfill('0') << hex << (int)buff[i];
+    }
+    ss >> hash_str;
+    ans->hash = uint256(hash_str);
+    string path = root_path + "/files";
+    string cmd = "mkdir -p " + path;
+    system(cmd.c_str());
+    ans->path = path + "/" + hash_str;
+
+    //接收ID
+    recv(fd, (void *)&ans->ID, 4, 0);
+
+    ofstream ofs;
+    ofs.open(ans->path.c_str());
+    int read;
+    while (1)
+    {
+        read = recv(fd, buf, 1024, 0);
+        if (read <= 0)
+        {
+            break;
+        }
+        ofs.write(buff, read);
+    }
+    return ans;
 }
 #endif

@@ -3,12 +3,15 @@
 #include <uint256.h>
 #include <FileSystem/FileBlock.h>
 #include <vector>
+#include <set>
 using namespace std;
-
-class StorageData
+//存储完整文件或一部分
+struct StorageData
 {
-public:
-    uint256 hash;
-    string path;
+    uint256 root_hash;
+    //完整文件的快数量
+    int BlockNum;
     vector<FileBlock *> files;
+    //默克尔ID
+    set<int> IDs;
 };
