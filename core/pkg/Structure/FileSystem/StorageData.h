@@ -12,6 +12,6 @@ struct StorageData
     //完整文件的快数量
     int BlockNum;
     vector<FileBlock *> files;
-    //默克尔ID
+    //默克尔树叶ID
     set<int> IDs;
 };

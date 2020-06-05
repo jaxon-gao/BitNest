@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <uint256.h>
 #include <vector>
+#include <config.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -185,7 +186,7 @@ bool send_file(int fd, StorageData *d)
         buff[i] = bits[i];
     }
     int size = d->files.size();
-    sned(fd, buff, 32, 0);
+    send(fd, buff, 32, 0);
     send(fd, (void *)&d->BlockNum, 4, 0);
     send(fd, (void *)&size, 4, 0);
     for (int i = 0; i < size; i++)
