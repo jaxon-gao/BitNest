@@ -10,6 +10,8 @@ private:
     map<uint256, vector<StorageData *>> files;
 
 public:
+    //using PeerInfo to search
     StorageData *search(uint256 hash, PeerInfo *p);
-    void addFile(StorageData *file);
+    //add file which identified by PeerInfo
+    void addFile(StorageData *file, PeerInfo *p);
 };
