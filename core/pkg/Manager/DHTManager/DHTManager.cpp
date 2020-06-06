@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <DHTManager/DHTManager.h>
 #include <vector>
+#include <sys/epoll.h>
 using namespace std;
 DHTManager::DHTManager(uint256 hash, int e)
 {
@@ -100,7 +101,7 @@ bool DHTManager::OldNode(PeerInfo *p)
     }
 }
 
-void EpollDel(PeerInfo *p)
+void DHTManager::EpollDel(PeerInfo *p)
 {
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLET;

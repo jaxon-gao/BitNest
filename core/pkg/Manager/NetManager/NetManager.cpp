@@ -138,11 +138,102 @@ NetManager::NetManager()
     string cmd = "mkdir -p " + root_path;
     system(cmd.c_str());
 
-    DHT = new DHTManager(*my);
+    DHT = new DHTManager(*my, epoll_in);
+    Union = new UnionManager(epoll_in);
 }
 //发送PBFT请求
 bool NetManager::sendPBFT(string msg)
 {
+}
+//倒计时
+void *time_out_callback(void *args)
+{
+    int *p = (int *)args;
+    int time_out = p[0];
+    int thread = p[1];
+    int sock = p[2];
+    for (int i = 0; i < p[0]; i++)
+    {
+        sleep(1);
+    }
+    close(sock);
+    pthread_detach(thread);
+}
+//文件接收
+void *file_recv_callback(void *args)
+{
+    pthread_t timer;
+
+    void **pointer = (void **)args;
+    int *psem = (int *)pointer[0];
+    int *psock = (int *)pointer[1];
+    //参数
+    int sem_id = *psem;
+    int sock_fd = *psock;
+    StorageData *res = (StorageData *)pointer[2];
+    //生产数据
+    lock_p(sem_id);
+
+    //开启监听
+    string ip = get_ip_from_fd(sock_fd);
+    if (ip.size() == 0)
+    {
+        return NULL;
+    }
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int cli_sock;
+    sockaddr_in serv_addr;
+    sockaddr_in cli_addr;
+    socklen_t len = sizeof(cli_addr);
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(FILE_PORT);
+    serv_addr.sin_addr.s_addr = inet_addr(ip.c_str());
+    setreuseaddr(sock);
+    bind(sock, (sockaddr *)&serv_addr, sizeof(sockaddr));
+    listen(sock, 3);
+    int params[3];
+    //time
+    params[0] = 3;
+    params[1] = pthread_self();
+    params[2] = sock;
+    //倒计时开启
+    pthread_create(&timer, NULL, time_out_callback, (void *)params);
+    cli_sock = accept(sock, (sockaddr *)&cli_addr, &len);
+    //时间内接收到连接，倒计时结束。
+    pthread_detach(timer);
+    res = recv_file(cli_sock);
+    lock_v(sem_id);
+}
+void *file_send_callback(void *args)
+{
+    pthread_t timer;
+    void **pointer = (void **)args;
+    int *psock = (int *)pointer[0];
+    StorageData *pfs = (StorageData *)pointer[1];
+    int sock_fd = *psock;
+    StorageData fs = *pfs;
+
+    string ip = get_ip_from_fd(sock_fd);
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int ser_sock;
+    sockaddr_in my_addr;
+    sockaddr_in ser_addr;
+    socklen_t len = sizeof(sockaddr);
+    my_addr.sin_family = AF_INET;
+    my_addr.sin_port = htons(FILE_PORT);
+    my_addr.sin_addr.s_addr = inet_addr(ip.c_str());
+    int param[3];
+    param[0] = 3;
+    param[1] = pthread_self();
+    param[2] = sock;
+    pthread_create(&timer, NULL, time_out_callback, (void *)param);
+    ser_sock = connect(sock, (sockaddr *)&ser_addr, len);
+    pthread_detach(timer);
+    send_file(sock, &fs);
+
+    delete psock;
+    delete pfs;
+    delete args;
 }
 //收包线程
 void *NetManager::reciver(void *args)
@@ -166,7 +257,9 @@ void *NetManager::reciver(void *args)
             break;
         case NK_PBFT_PPR:
             break;
+        case NK_SEND_FILE:
 
+            break;
         default:
             break;
         }
@@ -609,14 +702,14 @@ void NetManager::Emit(Storage *c)
     h.pk[1] = keys->pk[1];
     Emit(h, data);
 }
-stirng get_ip_from_fd(int fd)
+string get_ip_from_fd(int fd)
 {
     struct sockaddr_in sa;
     int len = sizeof(sa);
     string ans = "";
-    if (!getpeername(sockfd, (struct sockaddr *)&sa, &len))
+    if (!getpeername(fd, (struct sockaddr *)&sa, (socklen_t *)&len))
     {
-        ans = string(inet_ntoa(sa.sin_addr))
+        ans = string(inet_ntoa(sa.sin_addr));
     }
     return ans;
 }
@@ -624,40 +717,36 @@ void *NetManager::service_union(void *args)
 {
     Union->service_union(args);
 }
-
 StorageData *NetManager::FileReciever(PeerInfo *p)
 {
-    string ip = get_ip_from_fd(p->fd());
-    if (ip.size() == 0)
-    {
-        return NULL;
-    }
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    int cli_sock;
-    sockaddr_in serv_addr;
-    sockaddr_in cli_addr;
-    socklen_t len = sizeof(cli_addr);
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(FILE_PORT);
-    serv_addr.sin_addr.s_addr = inet_addr(ip.c_str());
+    int signal = semget(6001, 1, 0666 | IPC_CREAT);
+    set_semvalue(signal, 0);
 
-    bind(sock, (sockaddr *)&serv_addr, sizeof(sockaddr));
-    listen(sock, 3);
-    cli_sock = accept(sock, (sockaddr *)&cli_addr, &len);
+    char arg_buff[256];
+    void **pointer = new void *[3];
+
+    pointer[0] = new int(signal);
+    pointer[1] = new int(p->fd());
+
+    StorageData *ret = (StorageData *)pointer[2];
+
+    pthread_t thread;
+    lock_v(signal);
+    pthread_create(&thread, NULL, file_recv_callback, (void *)pointer);
+    lock_p(signal);
+    del_semvalue(signal);
     //接收文件
-    return recv_file(cli_sock);
+    return ret;
 }
-void NetManager::FileSender(PeerInfo *p, const StorageData &file)
+void NetManager::FileSender(PeerInfo *p, StorageData &file)
 {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    int ser_sock;
-    sockaddr_in my_addr;
-    sockaddr_in ser_addr;
-    socklen_t len = sizeof(cli_addr);
-    my_addr.sin_family = AF_INET;
-    my_addr.sin_port = htons(FILE_PORT);
-    my_addr.sin_addr.s_addr = inet_addr(ip.c_str());
-    ser_sock = connect(sock, (sockaddr *)&ser_addr, &len);
-    //上传文件
-    send_file(sock, file);
+    void **pointer = new void *[2];
+    StorageData *nf;
+    *nf = file;
+
+    pointer[0] = new int(p->fd());
+    pointer[1] = (void *)nf;
+
+    pthread_t thread;
+    pthread_create(&thread, NULL, file_send_callback, (void *)pointer);
 }

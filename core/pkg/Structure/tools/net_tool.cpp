@@ -152,58 +152,14 @@ void recv_content(int sockfd, string &m)
     }
 }
 
-StorageData *recv_file(int fd)
-{
-    uint8_t buff[64];
-    StorageData *ans = new StorageData;
-    recv(fd, buff, 32, 0);
-    stringstream ss;
-    string str;
-    for (int i = 0; i < 32; i++)
-    {
-        ss << setw(2) << setfill('0') << hex << (int)buff[i];
-    }
-    ss >> str;
-    ans->root_hash = uint256(str);
-    recv(fd, (void *)&ans->BlockNum, 4, 0);
-    int size;
-    recv(fd, (void *)&size, 4, 0);
-    FileBlock *tmp;
-    for (int i = 0; i < size; i++)
-    {
-        tmp = recv_fblock(fd);
-        ans->files.push_back(tmp);
-        IDs.insert(tmp->ID);
-    }
-    return ans;
-}
-bool send_file(int fd, StorageData *d)
-{
-    uint8_t buff[64];
-    vector<uint8_t> bits = d->root_hash.bits();
-    for (int i = 0; i < 32; i++)
-    {
-        buff[i] = bits[i];
-    }
-    int size = d->files.size();
-    send(fd, buff, 32, 0);
-    send(fd, (void *)&d->BlockNum, 4, 0);
-    send(fd, (void *)&size, 4, 0);
-    for (int i = 0; i < size; i++)
-    {
-        send_fblock(d->files[i])
-    }
-    return true;
-}
-
 //将文件块发送至套接字
 bool send_fblock(int fd, FileBlock *d)
 {
     //发送本块大小
-    uint8_t buff[1024];
+    char buff[1024];
     send(fd, (void *)&d->size, 4, 0);
 
-    vector<uint8_t> bits = d->hash.bits();
+    vector<uint8_t> bits = d->hash.export_bits();
     for (int i = 0; i < 32; i++)
     {
         buff[i] = bits[i];
@@ -213,18 +169,17 @@ bool send_fblock(int fd, FileBlock *d)
 
     //发送ID和块总数量
     send(fd, (void *)&d->ID, 4, 0);
-
-    ifstream ifs;
-    ifs.open(d->path.c_str());
-    int read;
+    FILE *f = fopen(d->path.c_str(), "r");
+    int r;
     while (1)
     {
-        read = ifs.read(buff, 1024);
-        if (read <= 0)
+        r = fread(buff, 1024, 1, f);
+        r = strlen(buff);
+        if (r <= 0)
         {
             break;
         }
-        send(fd, buff, read, 0);
+        send(fd, buff, r, 0);
     }
 }
 
@@ -232,7 +187,7 @@ bool send_fblock(int fd, FileBlock *d)
 FileBlock *recv_fblock(int fd)
 {
     //接收文件大小
-    uint8_t buff[1024];
+    char buff[1024];
     FileBlock *ans = new FileBlock;
     recv(fd, (void *)&ans->size, 4, 0);
     recv(fd, (void *)buff, 32, 0);
@@ -259,7 +214,7 @@ FileBlock *recv_fblock(int fd)
     int read;
     while (1)
     {
-        read = recv(fd, buf, 1024, 0);
+        read = recv(fd, buff, 1024, 0);
         if (read <= 0)
         {
             break;
@@ -268,4 +223,49 @@ FileBlock *recv_fblock(int fd)
     }
     return ans;
 }
+
+StorageData *recv_file(int fd)
+{
+    uint8_t buff[64];
+    StorageData *ans = new StorageData;
+    recv(fd, buff, 32, 0);
+    stringstream ss;
+    string str;
+    for (int i = 0; i < 32; i++)
+    {
+        ss << setw(2) << setfill('0') << hex << (int)buff[i];
+    }
+    ss >> str;
+    ans->root_hash = uint256(str);
+    recv(fd, (void *)&ans->BlockNum, 4, 0);
+    int size;
+    recv(fd, (void *)&size, 4, 0);
+    FileBlock *tmp;
+    for (int i = 0; i < size; i++)
+    {
+        tmp = recv_fblock(fd);
+        ans->files.push_back(tmp);
+        ans->IDs.insert(tmp->ID);
+    }
+    return ans;
+}
+bool send_file(int fd, StorageData *d)
+{
+    uint8_t buff[64];
+    vector<uint8_t> bits = d->root_hash.export_bits();
+    for (int i = 0; i < 32; i++)
+    {
+        buff[i] = bits[i];
+    }
+    int size = d->files.size();
+    send(fd, buff, 32, 0);
+    send(fd, (void *)&d->BlockNum, 4, 0);
+    send(fd, (void *)&size, 4, 0);
+    for (int i = 0; i < size; i++)
+    {
+        send_fblock(fd, d->files[i]);
+    }
+    return true;
+}
+
 #endif

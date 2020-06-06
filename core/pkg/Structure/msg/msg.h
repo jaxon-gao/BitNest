@@ -48,7 +48,7 @@
 #define NK_SEND_POST '0'
 #define NK_SEND_IB 'a'
 #define NK_SEND_PB 'b'
-#define NK_SEND_FILE 'c'
+#define NK_SEND_FILE 'C'
 
 //回复和错误
 #define NK_QUERY_ERR '-'

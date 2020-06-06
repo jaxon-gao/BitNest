@@ -30,7 +30,7 @@ void recv_content(int sockfd, string &m);
 StorageData *recv_file(int fd);
 
 //将文件存储发送至套接字
-bool send_file(int fd, const StorageData &d);
+bool send_file(int fd, StorageData *d);
 
 //将文件块发送至套接字
 bool send_fblock(int fd, FileBlock *d);
