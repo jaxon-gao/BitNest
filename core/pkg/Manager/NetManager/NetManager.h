@@ -4,6 +4,7 @@
 #include <DHTManager/DHTManager.h>
 #include <BlockManager/BlockManager.h>
 #include <UnionManager/UnionManager.h>
+#include <StoreManager/StorageManager.h>
 #include <contract/backup.h>
 #include <contract/storage.h>
 #include <map>
@@ -20,7 +21,8 @@ private:
     DHTManager *DHT;
     BlockManager *Blocks;
     UnionManager *Union;
-
+    StorageManager *Files;
+    WalletManager *wallet;
     //来自客户端的连接
     vector<int> cli_fd;
 

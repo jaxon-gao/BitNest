@@ -1,8 +1,21 @@
 #include <StoreManager/StorageManager.h>
-StorageData *StorageManager::search(uint256 hash, PeerInfo *p)
+#include <map>
+#include <vector>
+using namespace std;
+StorageData *StorageManager::*search(signature sig, PeerInfo *p)
 {
+    //添加简单验证
+    return files[sig];
 }
-
-void StorageManager::addFile(StorageData *file)
+//add file which identified by PeerInfo
+void StorageManager::addFile(signature sig, StorageData *d)
 {
+
+    if (1 == files.count(sig))
+    {
+    }
+    else
+    {
+        files[sig] = d;
+    }
 }
