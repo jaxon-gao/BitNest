@@ -5,6 +5,7 @@
 #include <BlockManager/BlockManager.h>
 #include <UnionManager/UnionManager.h>
 #include <StoreManager/StorageManager.h>
+#include <WalletManager/WalletManager.h>
 #include <contract/backup.h>
 #include <contract/storage.h>
 #include <map>
@@ -50,6 +51,9 @@ private:
     //接收epoll
     int epoll_in;
 
+    set<int> sender_listen;
+    map<int, msg> sendlist;
+
 public:
     //网络管理器入口
     void deamon();
@@ -62,6 +66,7 @@ public:
     void discovery(PeerInfo *p);
     //P2P服务
     void *AddEventIn(void *arg);
+    void *sender(void *args);
     void *reciver(void *args);
     void *service_accept(void *args);
     void *service_nmdns(void *args);

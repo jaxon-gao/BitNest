@@ -28,6 +28,8 @@ using namespace std;
 #define PORT 6000
 #define MAXBACK 1000
 #define FILE_PORT 6001
+
+NetManager *callback_n;
 NetManager::NetManager(PeerInfo *seed)
 {
     //创建epoll
@@ -83,6 +85,7 @@ NetManager::NetManager(PeerInfo *seed)
     system(cmd.c_str());
     DHT = new DHTManager(*my, epoll_in);
     Union = new UnionManager(epoll_in);
+    Files = new StorageManager();
 }
 //种子功能未使用，两个函数函数体相同
 NetManager::NetManager()
@@ -236,32 +239,67 @@ void *file_send_callback(void *args)
     delete args;
 }
 //收包线程
+PeerInfo *p;
+void *callback_fr(void *args)
+{
+    callback_n->FileReciever(p);
+}
 void *NetManager::reciver(void *args)
 {
     msg_header m;
+    msg_header s;
     int listener = listen_fd;
+    pthread_t th;
+    int wait_fds;
+    int fd_curr;
+    string ret;
+    struct epoll_event evs[MAXEPOLL];
     while (1)
     {
-        recv_header(listener, m);
-        switch (m.kind)
+        if ((wait_fds = epoll_wait(NetManager::epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
         {
-        case DHT_FIND_NODE:
-            break;
-        case NK_PBFT_PRE:
-            break;
-        case NK_PBFT_REQ:
-            break;
-        case NK_PBFT_RES:
-            break;
-        case NK_PBFT_COM:
-            break;
-        case NK_PBFT_PPR:
-            break;
-        case NK_SEND_FILE:
+            printf("Epoll Wait Error : %d\n", errno);
+            exit(EXIT_FAILURE);
+        }
+        for (int i = 0; i < wait_fds; i++)
+        {
+            fd_curr = evs[i].data.fd;
+            recv_header(listener, m);
+            switch (m.kind)
+            {
+            case DHT_FIND_NODE:
+                PeerInfo *aim = new PeerInfo(m.data[0], 0);
+                vector<PeerInfo *> nodes = DHT->Query(aim);
+                delete aim;
+                s.kind = DHT_RET;
+                //绑定公钥
+                s.pk[0] = keys->pk[0];
+                s.pk[1] = keys->pk[1];
+                //绑定数据内容
+                s.data[0] = m.pk[0];
+                s.data[1] = m.pk[1];
+                send_msg(fd_curr, ) break;
+            case NK_PBFT_PRE:
+                break;
+            case NK_PBFT_REQ:
+                vector<PeerInfo *> uall = Union->AddNode();
 
-            break;
-        default:
-            break;
+                //转发请求
+                break;
+            case NK_PBFT_RES:
+                break;
+            case NK_PBFT_COM:
+                break;
+            case NK_PBFT_PPR:
+                break;
+            case NK_SEND_FILE:
+                //验明身份
+                //接收文件
+                pthread_create(&th, NULL, callback_fr, NULL);
+                break;
+            default:
+                break;
+            }
         }
     }
 }
@@ -496,6 +534,7 @@ void *NetManager::service_accept(void *arg)
                 cout << "new connection:" << hex << PeerHash << endl;
                 //增加监听限制。
                 //目前的监听限制在DHT和Union中保护
+                //增加安全验证
                 epoll_ctl(NetManager::epoll_in, EPOLL_CTL_ADD, evs[i].data.fd, &ev); //!> 计入FD
 
                 epoll_ctl(NetManager::epoll_acc_fd, EPOLL_CTL_DEL, evs[i].data.fd, &ev); //!> 删除计入的fd
@@ -513,7 +552,6 @@ void *NetManager::service_nmdns(void *arg)
     ret = service_mdns(hostname.c_str(), service.c_str(), service_port);
 }
 
-NetManager *callback_n;
 void *union_callback(void *arg)
 {
     callback_n->service_union(arg);
@@ -719,6 +757,7 @@ void *NetManager::service_union(void *args)
 }
 StorageData *NetManager::FileReciever(PeerInfo *p)
 {
+    //发送和接收签名
     int signal = semget(6001, 1, 0666 | IPC_CREAT);
     set_semvalue(signal, 0);
 
@@ -735,7 +774,13 @@ StorageData *NetManager::FileReciever(PeerInfo *p)
     pthread_create(&thread, NULL, file_recv_callback, (void *)pointer);
     lock_p(signal);
     del_semvalue(signal);
+    //添加至存储管理器中
+
     //接收文件
+    signature sig;
+    sig.s = ret->sig[0];
+    sig.r = ret->sig[1];
+    files->addFile(sig, ret);
     return ret;
 }
 void NetManager::FileSender(PeerInfo *p, StorageData &file)

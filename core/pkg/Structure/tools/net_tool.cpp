@@ -237,6 +237,25 @@ StorageData *recv_file(int fd)
     }
     ss >> str;
     ans->root_hash = uint256(str);
+
+    ss.clear();
+    recv(fd, buff, 32, 0);
+    for (int i = 0; i < 32; i++)
+    {
+        ss << setw(2) << setfill('0') << hex << (int)buff[i];
+    }
+    ss >> str;
+    ans->sig[0] = uint256(str);
+
+    ss.clear();
+    recv(fd, buff, 32, 0);
+    for (int i = 0; i < 32; i++)
+    {
+        ss << setw(2) << setfill('0') << hex << (int)buff[i];
+    }
+    ss >> str;
+    ans->sig[1] = uint256(str);
+
     recv(fd, (void *)&ans->BlockNum, 4, 0);
     int size;
     recv(fd, (void *)&size, 4, 0);
@@ -259,6 +278,21 @@ bool send_file(int fd, StorageData *d)
     }
     int size = d->files.size();
     send(fd, buff, 32, 0);
+
+    bits = d->sig[0].export_bits();
+    for (int i = 0; i < 32; i++)
+    {
+        buff[i] = bits[i];
+    }
+    send(fd, buff, 32, 0);
+
+    bits = d->sig[1].export_bits();
+    for (int i = 0; i < 32; i++)
+    {
+        buff[i] = bits[i];
+    }
+    send(fd, buff, 32, 0);
+
     send(fd, (void *)&d->BlockNum, 4, 0);
     send(fd, (void *)&size, 4, 0);
     for (int i = 0; i < size; i++)

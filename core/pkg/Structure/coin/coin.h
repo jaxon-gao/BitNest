@@ -6,15 +6,20 @@
 #include <string.h>
 #include <FileSystem/NFile.h>
 #include <contract/contract.h>
+#include <contract/payment.h>
+#include <contract/backup.h>
+#include <contract/storage.h>
 using namespace std;
 class coin : public NFile
 {
+
 public:
+    int num;
     coin(string path);
-    Mint(payment c);
-    Mint(storage c);
-    Mint(backup c);
-    Mint(coin c, int num);
-    pay(int num);
-}
+    coin Mint(payment c);
+    coin Mint(Storage c);
+    coin Mint(BackUp c);
+    coin Mint(coin c, int num);
+    void pay(int num);
+};
 #endif

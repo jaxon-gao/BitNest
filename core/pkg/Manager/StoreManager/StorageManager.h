@@ -8,11 +8,12 @@ class StorageManager
 {
 private:
     //PeerOnfo
-    map<signature, vector<StorageData *>> files;
+    map<signature, StorageData *> files;
 
 public:
+    StorageManager() {}
     //using PeerInfo to search
-    StorageData *search(uint256 hash, PeerInfo *p);
+    StorageData *search(signature sig, PeerInfo *p);
     //add file which identified by PeerInfo
     void addFile(signature sig, StorageData *d);
 };

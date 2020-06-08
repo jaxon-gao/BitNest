@@ -33,6 +33,7 @@
 //DHT 发现节点请求
 #define DHT_CONNECT 'd'
 #define DHT_FIND_NODE 'D'
+#define DHT_RET 'e'
 
 //查询：data为目标
 #define NK_QUERY_PAY '1'
@@ -64,4 +65,9 @@ struct msg_header
     int msg_size;
 };
 
+struct msg
+{
+    msg_header;
+    string msg;
+}
 #endif

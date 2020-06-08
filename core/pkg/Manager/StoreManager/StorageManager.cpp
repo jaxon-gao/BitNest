@@ -4,7 +4,7 @@
 using namespace std;
 StorageData *StorageManager::*search(signature sig, PeerInfo *p)
 {
-    //添加简单验证
+    //添加验证
     return files[sig];
 }
 //add file which identified by PeerInfo
