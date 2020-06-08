@@ -278,7 +278,8 @@ void *NetManager::reciver(void *args)
                 //绑定数据内容
                 s.data[0] = m.pk[0];
                 s.data[1] = m.pk[1];
-                send_msg(fd_curr, ) break;
+
+                break;
             case NK_PBFT_PRE:
                 break;
             case NK_PBFT_REQ:

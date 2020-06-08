@@ -51,8 +51,7 @@ private:
     //接收epoll
     int epoll_in;
 
-    set<int> sender_listen;
-    map<int, msg> sendlist;
+    //发送队列
 
 public:
     //网络管理器入口
