@@ -26,7 +26,7 @@ vector<msg> sendlist::msg_of(int fd)
     vector<msg> vv;
     if (1 == list_msg.count(fd))
     {
-        vector<msg> v2 list_msg[fd];
+        vector<msg> v2 = list_msg[fd];
         list_msg[fd] = vv;
         return v2;
     }
@@ -84,7 +84,7 @@ vector<int> sendlist::get_fd()
 {
     lock_p(sem_lock);
     vector<int> ans;
-    map<int, msg>::iterator iter = list_msg.begin();
+    map<int, vector<msg>>::iterator iter = list_msg.begin();
     while (iter != list_msg.end())
     {
         int fd = iter->first;

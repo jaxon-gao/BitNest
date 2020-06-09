@@ -39,6 +39,7 @@ Structure/hash/sha256.o\
 Structure/ECC/uECC.o\
 Structure/tools/test_net_tool.o\
 Structure/sendlist/sendlist.o\
+Manager/StoreManager/StorageManager.o\
 Manager/BlockManager/BlockManager.o\
 Manager/UnionManager/UnionManager.o\
 Manager/NetManager/NetManager.o\

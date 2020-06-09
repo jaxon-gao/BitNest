@@ -47,9 +47,12 @@ private:
 
     //接收epoll
     int epoll_in;
+    int epoll_out;
 
     //发送队列
-    sendlist SendList;
+    sendlist *SendList;
+
+    int lock_out, out_cur_fds;
 
 public:
     //网络管理器入口

@@ -87,6 +87,7 @@ NetManager::NetManager(PeerInfo *seed)
     DHT = new DHTManager(*my, epoll_in);
     Union = new UnionManager(epoll_in);
     Files = new StorageManager();
+    SendList = new sendlist(epoll_out);
 }
 //种子功能未使用，两个函数函数体相同
 NetManager::NetManager()
@@ -258,6 +259,8 @@ void *NetManager::reciver(void *args)
     msg msg_send;
     //header to be sent (use it when you just send header)
     msg_header s;
+    vector<PeerInfo *> uall;
+    PeerInfo *aim;
     while (1)
     {
         if ((wait_fds = epoll_wait(epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
@@ -268,11 +271,12 @@ void *NetManager::reciver(void *args)
         for (int i = 0; i < wait_fds; i++)
         {
             fd_curr = evs[i].data.fd;
-            recv_header(fd_curr, m);
-            switch (m.kind)
+            recv_header(fd_curr, header_recv);
+            switch (header_recv.kind)
             {
             case DHT_FIND_NODE:
-                PeerInfo *aim = new PeerInfo(m.data[0], 0);
+            {
+                aim = new PeerInfo(header_recv.data[0], 0);
                 vector<PeerInfo *> nodes = DHT->Query(aim);
                 delete aim;
                 s.kind = DHT_RET;
@@ -280,32 +284,62 @@ void *NetManager::reciver(void *args)
                 s.pk[0] = keys->pk[0];
                 s.pk[1] = keys->pk[1];
                 //绑定数据内容
-                s.data[0] = m.pk[0];
-                s.data[1] = m.pk[1];
+                s.data[0] = header_recv.pk[0];
+                s.data[1] = header_recv.pk[1];
 
                 break;
+            }
+
             case NK_PBFT_PRE:
+            {
+                s.kind = NK_PBFT_COM;
+                s.pk[0] = keys->pk[0];
+                s.pk[1] = keys->pk[1];
+                s.data[0] = header_recv.pk[0];
+                s.data[1] = header_recv.pk[1];
+                msg_send.header = s;
+                msg_send.msg = "";
+                SendList->new_msg(fd_curr, msg_send);
                 break;
+            }
             case NK_PBFT_REQ:
-                vector<PeerInfo *> uall = Union->AddNode();
+            {
+                uall = Union->getAll();
                 recv_content(fd_curr, msg_send.msg);
+                s.data[0] = header_recv.pk[0];
+                s.data[1] = header_recv.pk[1];
                 for (int i = 0; i < uall.size(); i++)
                 {
                     s.kind = NK_PBFT_PPR;
                     s.pk[0] = keys->pk[0];
                     s.pk[1] = keys->pk[1];
-                    s.data[0] = m.pk[0];
-                    s.data[1] = m.pk[1];
-                    msg_send.msg_header = s;
-                    SendList.new_msg(fd_curr, msg_send);
+                    msg_send.header = s;
+                    SendList->new_msg(uall[i]->fd(), msg_send);
                 }
                 break;
+            }
+
             case NK_PBFT_RES:
                 break;
             case NK_PBFT_COM:
                 break;
             case NK_PBFT_PPR:
+            {
+                uall = DHT->GetAllNode();
+                recv_content(fd_curr, msg_send.msg);
+                s.data[0] = header_recv.pk[0];
+                s.data[1] = header_recv.pk[1];
+                for (int i = 0; i < uall.size(); i++)
+                {
+                    s.kind = NK_PBFT_PRE;
+                    s.pk[0] = keys->pk[0];
+                    s.pk[1] = keys->pk[1];
+                    msg_send.header = s;
+                    SendList->new_msg(uall[i]->fd(), msg_send);
+                }
                 break;
+            }
+
             case NK_SEND_FILE:
                 //验明身份
                 //接收文件
@@ -796,9 +830,9 @@ StorageData *NetManager::FileReciever(PeerInfo *p)
 
     //接收文件
     signature sig;
-    sig.s = ret->sig[0];
-    sig.r = ret->sig[1];
-    files->addFile(sig, ret);
+    sig.sig[0] = ret->sig[0];
+    sig.sig[1] = ret->sig[1];
+    Files->addFile(sig, ret);
     return ret;
 }
 void NetManager::FileSender(PeerInfo *p, StorageData &file)
@@ -816,22 +850,21 @@ void NetManager::FileSender(PeerInfo *p, StorageData &file)
 
 void *NetManager::sender(void *args)
 {
-    int epoll_out = epoll_create(MAXEPOLL);
     int wait_fds;
     struct epoll_event ev;
     struct epoll_event evs[MAXEPOLL];
-    vector<int> fds = SendList.get_fd();
+    vector<int> fds = SendList->get_fd();
     ev.events = EPOLLOUT || EPOLLET;
-    inr curr_fd;
+    int curr_fd;
     vector<msg> msgs;
     for (int i = 0; i < fds.size(); ++i)
     {
         ev.data.fd = fds[i];
-        epoll_ctl(epoll_out, EPOLL_CTL_ADD, fds[i], &ev)
+        epoll_ctl(epoll_out, EPOLL_CTL_ADD, fds[i], &ev);
     }
     while (1)
     {
-        if ((wait_fds = epoll_wait(epoll_emit, evs, acc_cur_fds, -1)) == -1)
+        if ((wait_fds = epoll_wait(epoll_out, evs, acc_cur_fds, -1)) == -1)
         {
             printf("Epoll Wait Error : %d\n", errno);
             exit(EXIT_FAILURE);
@@ -839,10 +872,10 @@ void *NetManager::sender(void *args)
         for (int i = 0; i < wait_fds; i++)
         {
             curr_fd = evs[i].data.fd;
-            msgs = SendList.msg_of(curr_fd);
+            msgs = SendList->msg_of(curr_fd);
             for (int i = 0; i < msgs.size(); i++)
             {
-                //发送失败处理
+                //失败错误未检测
                 send_msg(curr_fd, msgs[i].header, msgs[i].msg);
             }
         }

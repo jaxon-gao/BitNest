@@ -1,6 +1,8 @@
 #ifndef NEST_MSG
 #define NEST_MSG
+#include <string>
 #include <uint256.h>
+using namespace std;
 //PBFT可以实现的事：
 /*
 1、启动合同:data携带合同哈希
@@ -67,7 +69,7 @@ struct msg_header
 
 struct msg
 {
-    msg_header;
+    msg_header header;
     string msg;
-}
+};
 #endif
