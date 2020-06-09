@@ -13,6 +13,7 @@
 #include <tools/net_tool.h>
 #include <FileSystem/StorageData.h>
 #include <string>
+#include <sendlist/sendlist.h>
 using namespace std;
 
 string get_ip_from_fd(int fd);
@@ -40,18 +41,15 @@ private:
     //哈希地址、密钥对
     uint256 *my;
     KeyPair *keys;
-    int sem_send;
 
     //接收连接epoll
     int listen_fd, epoll_acc_fd, acc_cur_fds;
-
-    //发送epoll
-    int epoll_out, out_cur_fds, lock_out;
 
     //接收epoll
     int epoll_in;
 
     //发送队列
+    sendlist SendList;
 
 public:
     //网络管理器入口

@@ -22,6 +22,7 @@
 #include <tools/net_tool.h>
 #include <DHTManager/DHTManager.h>
 #include <iomanip>
+#include <sendlist/sendlist.h>
 using namespace std;
 #define MAXEPOLL 10000 /* 对于服务器来说，这个值可以很大的！ */
 #define MAXLINE 1024
@@ -246,17 +247,20 @@ void *callback_fr(void *args)
 }
 void *NetManager::reciver(void *args)
 {
-    msg_header m;
-    msg_header s;
+    msg_header header_recv;
     int listener = listen_fd;
     pthread_t th;
     int wait_fds;
     int fd_curr;
     string ret;
     struct epoll_event evs[MAXEPOLL];
+    //msg to be sent
+    msg msg_send;
+    //header to be sent (use it when you just send header)
+    msg_header s;
     while (1)
     {
-        if ((wait_fds = epoll_wait(NetManager::epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
+        if ((wait_fds = epoll_wait(epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
         {
             printf("Epoll Wait Error : %d\n", errno);
             exit(EXIT_FAILURE);
@@ -264,7 +268,7 @@ void *NetManager::reciver(void *args)
         for (int i = 0; i < wait_fds; i++)
         {
             fd_curr = evs[i].data.fd;
-            recv_header(listener, m);
+            recv_header(fd_curr, m);
             switch (m.kind)
             {
             case DHT_FIND_NODE:
@@ -284,8 +288,17 @@ void *NetManager::reciver(void *args)
                 break;
             case NK_PBFT_REQ:
                 vector<PeerInfo *> uall = Union->AddNode();
-
-                //转发请求
+                recv_content(fd_curr, msg_send.msg);
+                for (int i = 0; i < uall.size(); i++)
+                {
+                    s.kind = NK_PBFT_PPR;
+                    s.pk[0] = keys->pk[0];
+                    s.pk[1] = keys->pk[1];
+                    s.data[0] = m.pk[0];
+                    s.data[1] = m.pk[1];
+                    msg_send.msg_header = s;
+                    SendList.new_msg(fd_curr, msg_send);
+                }
                 break;
             case NK_PBFT_RES:
                 break;
@@ -447,7 +460,7 @@ void *NetManager::service_accept(void *arg)
     servaddr.sin_port = htons(PORT);
 
     //!> 建立套接字
-    if ((NetManager::listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         printf("Socket Error...\n", errno);
         exit(EXIT_FAILURE);
@@ -455,7 +468,7 @@ void *NetManager::service_accept(void *arg)
 
     //!> 设置非阻塞模式
     //!>
-    if (setnonblocking(NetManager::listen_fd) == -1)
+    if (setnonblocking(listen_fd) == -1)
     {
         printf("Setnonblocking Error : %d\n", errno);
         exit(EXIT_FAILURE);
@@ -463,7 +476,7 @@ void *NetManager::service_accept(void *arg)
 
     //!> 绑定
     //!>
-    if (bind(NetManager::listen_fd, (struct sockaddr *)&servaddr, sizeof(struct sockaddr)) == -1)
+    if (bind(listen_fd, (struct sockaddr *)&servaddr, sizeof(struct sockaddr)) == -1)
     {
         printf("Bind Error : %d\n", errno);
         exit(EXIT_FAILURE);
@@ -471,7 +484,7 @@ void *NetManager::service_accept(void *arg)
 
     //!> 监听
     //!>
-    if (listen(NetManager::listen_fd, MAXBACK) == -1)
+    if (listen(listen_fd, MAXBACK) == -1)
     {
         printf("Listen Error : %d\n", errno);
         exit(EXIT_FAILURE);
@@ -480,18 +493,18 @@ void *NetManager::service_accept(void *arg)
     //!> 创建epoll
     //!>
 
-    ev.events = EPOLLIN | EPOLLET;      //!> accept Read!
-    ev.data.fd = NetManager::listen_fd; //!> 将listen_fd 加入
-    if (epoll_ctl(NetManager::epoll_acc_fd, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
+    ev.events = EPOLLIN | EPOLLET; //!> accept Read!
+    ev.data.fd = listen_fd;        //!> 将listen_fd 加入
+    if (epoll_ctl(epoll_acc_fd, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
     {
         printf("Epoll Error : %d\n", errno);
         exit(EXIT_FAILURE);
     }
-    NetManager::acc_cur_fds = 1;
+    acc_cur_fds = 1;
 
     while (1)
     {
-        if ((wait_fds = epoll_wait(NetManager::epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
+        if ((wait_fds = epoll_wait(epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
         {
             printf("Epoll Wait Error : %d\n", errno);
             exit(EXIT_FAILURE);
@@ -507,7 +520,7 @@ void *NetManager::service_accept(void *arg)
                 }
                 ev.events = EPOLLIN | EPOLLET; //!> accept Read!
                 ev.data.fd = conn_fd;          //!> 将conn_fd 加入
-                if (epoll_ctl(NetManager::epoll_acc_fd, EPOLL_CTL_ADD, conn_fd, &ev) < 0)
+                if (epoll_ctl(epoll_acc_fd, EPOLL_CTL_ADD, conn_fd, &ev) < 0)
                 {
                     printf("Epoll Error : %d\n", errno);
                     exit(EXIT_FAILURE);
@@ -526,8 +539,8 @@ void *NetManager::service_accept(void *arg)
                 connectPeer = new PeerInfo(PeerHash, evs[i].data.fd);
                 connectPeer->pk[0] = header.pk[0];
                 connectPeer->pk[1] = header.pk[1];
-                header.pk[0] = NetManager::keys->pk[0];
-                header.pk[1] = NetManager::keys->pk[1];
+                header.pk[0] = keys->pk[0];
+                header.pk[1] = keys->pk[1];
                 header.kind = DHT_CONNECT;
                 header.msg_size = 0;
                 send_msg(evs[i].data.fd, header, "");
@@ -536,9 +549,9 @@ void *NetManager::service_accept(void *arg)
                 //增加监听限制。
                 //目前的监听限制在DHT和Union中保护
                 //增加安全验证
-                epoll_ctl(NetManager::epoll_in, EPOLL_CTL_ADD, evs[i].data.fd, &ev); //!> 计入FD
+                epoll_ctl(epoll_in, EPOLL_CTL_ADD, evs[i].data.fd, &ev); //!> 计入FD
 
-                epoll_ctl(NetManager::epoll_acc_fd, EPOLL_CTL_DEL, evs[i].data.fd, &ev); //!> 删除计入的fd
+                epoll_ctl(epoll_acc_fd, EPOLL_CTL_DEL, evs[i].data.fd, &ev); //!> 删除计入的fd
                 --acc_cur_fds;
             }
         }
@@ -573,11 +586,15 @@ void *reciever_callback(void *arg)
 {
     callback_n->service_accept(arg);
 }
-
+void *sender_callback(void *arg)
+{
+    callback_n->sender(arg);
+}
 void NetManager::deamon()
 {
     callback_n = this;
     pthread_t threads[5];
+    pthread_create(&threads[4], 0, sender_callback, NULL);
     pthread_create(&threads[0], 0, union_callback, NULL);
     pthread_create(&threads[1], 0, net_callback, NULL);
     pthread_create(&threads[2], 0, mdns_callback, NULL);
@@ -795,4 +812,39 @@ void NetManager::FileSender(PeerInfo *p, StorageData &file)
 
     pthread_t thread;
     pthread_create(&thread, NULL, file_send_callback, (void *)pointer);
+}
+
+void *NetManager::sender(void *args)
+{
+    int epoll_out = epoll_create(MAXEPOLL);
+    int wait_fds;
+    struct epoll_event ev;
+    struct epoll_event evs[MAXEPOLL];
+    vector<int> fds = SendList.get_fd();
+    ev.events = EPOLLOUT || EPOLLET;
+    inr curr_fd;
+    vector<msg> msgs;
+    for (int i = 0; i < fds.size(); ++i)
+    {
+        ev.data.fd = fds[i];
+        epoll_ctl(epoll_out, EPOLL_CTL_ADD, fds[i], &ev)
+    }
+    while (1)
+    {
+        if ((wait_fds = epoll_wait(epoll_emit, evs, acc_cur_fds, -1)) == -1)
+        {
+            printf("Epoll Wait Error : %d\n", errno);
+            exit(EXIT_FAILURE);
+        }
+        for (int i = 0; i < wait_fds; i++)
+        {
+            curr_fd = evs[i].data.fd;
+            msgs = SendList.msg_of(curr_fd);
+            for (int i = 0; i < msgs.size(); i++)
+            {
+                //发送失败处理
+                send_msg(curr_fd, msgs[i].header, msgs[i].msg);
+            }
+        }
+    }
 }
