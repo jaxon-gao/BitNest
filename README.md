@@ -1,5 +1,5 @@
 # BitNest
-The BitNest Cloud Storage Scheme. I Just want to do something big now. 
+The BitNest Cloud Storage Scheme. Maybe it is something like IPFS/Filecoin. But I am not sure whether it will be such big. I Just want to do something big now. 
 
 # Development version 0.0.2
 - Development version use TCP connection
