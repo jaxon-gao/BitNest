@@ -286,7 +286,6 @@ void *NetManager::reciver(void *args)
                 //绑定数据内容
                 s.data[0] = header_recv.pk[0];
                 s.data[1] = header_recv.pk[1];
-
                 break;
             }
 
@@ -322,7 +321,9 @@ void *NetManager::reciver(void *args)
             case NK_PBFT_RES:
                 break;
             case NK_PBFT_COM:
-                break;
+            {
+            }
+            break;
             case NK_PBFT_PPR:
             {
                 uall = DHT->GetAllNode();
@@ -642,6 +643,8 @@ void *NetManager::service_net(void *args)
 {
     while (1)
     {
+        //维护PBFT准备
+        //维护PBFT请求
         sleep(1);
         if (Union->isUnionLeader())
         {
