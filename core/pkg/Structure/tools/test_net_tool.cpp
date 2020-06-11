@@ -20,8 +20,10 @@ using namespace std;
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <signal.h>
 #endif
 using namespace std;
+//全局变量
 msg_header headers[2];
 void *sub_thread(void *args)
 {
@@ -35,8 +37,12 @@ void *sub_thread(void *args)
     connect(cli_fd, (sockaddr *)&ser_addr, sizeof(sockaddr));
     string msg = "hello world";
     send_msg(cli_fd, headers[0], msg);
+    close(cli_fd);
 }
-
+static void handle_test(int sig)
+{
+    cout << "logserver has close ===>" << endl;
+}
 bool test_net_tool()
 {
     string msg;
@@ -126,6 +132,10 @@ bool test_net_tool()
     {
         return false;
     }
+    signal(SIGPIPE, handle_test);
+    close(cli_fd);
+    close(serv_fd);
+    pthread_detach(thread);
     cout << "test: net tool test finished" << endl;
     return true;
 }

@@ -28,6 +28,14 @@ bool DHTManager::AddNode(PeerInfo *p)
 bool DHTManager::DelNode(PeerInfo *p)
 {
     uint256 lay = my->layer(p);
+    if (p->hash() == 0)
+    {
+        map<uint256, Bucket *>::iterator iter = buckets.begin();
+        while (iter != buckets.end())
+        {
+            iter->second->DelNode(p);
+        }
+    }
     if (1 == buckets.count(lay))
     {
         return buckets[lay]->DelNode(p);

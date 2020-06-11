@@ -34,6 +34,7 @@ StorageData *depart_file(string path)
             ret->files.push_back(n);
         }
     }
+    fclose(f);
     merkle *m = new merkle(ret);
     delete m;
     return ret;

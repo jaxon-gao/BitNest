@@ -9,6 +9,8 @@
 #include <NetManager/test_NetManager.h>
 #include <tools/test_net_tool.h>
 #include <merkle/test_merkel.h>
+#include <UnionManager/test_union.h>
+#include <sendlist/test_sendlist.h>
 #include <iostream>
 using namespace std;
 int main()
@@ -41,10 +43,6 @@ int main()
     {
         cerr << "[err] post error" << endl;
     }
-    if (!test_net_manager())
-    {
-        cerr << "[err] NetManager error" << endl;
-    }
     if (!test_net_tool())
     {
         cerr << "[err] NetTool error" << endl;
@@ -52,6 +50,19 @@ int main()
     if (!test_merkle())
     {
         cerr << "[err] merkle error" << endl;
+    }
+    if (!test_union())
+    {
+        cerr << "[err] union error" << endl;
+    }
+    if (!test_sendlist())
+    {
+        cerr << "[err] sendlist error" << endl;
+    }
+
+    if (!test_net_manager())
+    {
+        cerr << "[err] NetManager error" << endl;
     }
 
     //output of test passed

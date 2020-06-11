@@ -137,8 +137,15 @@ void send_msg(int sockfd, const msg_header &h, const string &m)
 char recv_header(int sockfd, msg_header &h)
 {
     uint8_t buffer[134];
-    recv(sockfd, buffer, 134, 0);
-    h = *buffer_header(buffer);
+    int r = recv(sockfd, buffer, 134, 0);
+    if (r == 0 && errno == EAGAIN)
+    {
+        h.kind = NK_OFFLINE;
+    }
+    else
+    {
+        h = *buffer_header(buffer);
+    }
     return h.kind;
 }
 void recv_content(int sockfd, string &m)

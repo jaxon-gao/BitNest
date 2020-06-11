@@ -1,8 +1,10 @@
 #include <sendlist/sendlist.h>
+#include <iostream>
+using namespace std;
 sendlist::sendlist(int e)
 {
     epoll_fd = e;
-    sem_lock = semget((key_t)epoll_fd, 0, 0666 | IPC_CREAT);
+    sem_lock = semget((key_t)epoll_fd * 102, 1, 0666 | IPC_CREAT);
     set_semvalue(sem_lock, 1);
 }
 void sendlist::new_msg(int fd, msg m)

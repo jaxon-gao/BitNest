@@ -1,6 +1,7 @@
 #include <merkle/test_merkel.h>
 bool test_merkle()
 {
+    //nn: "Hello World"
     vector<uint8_t> nn;
     nn.push_back('H');
     nn.push_back('e');
@@ -21,7 +22,10 @@ bool test_merkle()
     {
         return false;
     }
-    cout << hex << getHash("/home/jiang/Desktop/test/test_merkle") << endl;
+    //vim 自动添加了\n于文件末尾 测试
+    //Hello World\n
+    // cout << str << endl;
+    // cout << hex << getHash("/home/jiang/Desktop/test/test_merkle") << endl;
     cout << "test: merkle test finished" << endl;
     return true;
 }

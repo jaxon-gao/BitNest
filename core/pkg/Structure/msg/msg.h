@@ -58,6 +58,8 @@ using namespace std;
 
 //nest message kind normal正常消息
 #define NK_NORMAL 'n'
+//断开请求
+#define NK_OFFLINE 'o'
 
 struct msg_header
 {

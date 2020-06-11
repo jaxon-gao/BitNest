@@ -29,6 +29,7 @@ using namespace std;
 #define PORT 6000
 #define MAXBACK 1000
 #define FILE_PORT 6001
+#define RECV_PORT 6002
 
 NetManager *callback_n;
 NetManager::NetManager(PeerInfo *seed)
@@ -88,10 +89,16 @@ NetManager::NetManager(PeerInfo *seed)
     Union = new UnionManager(epoll_in);
     Files = new StorageManager();
     SendList = new sendlist(epoll_out);
+    Blocks = new BlockManager();
+
+    discovery();
 }
 //种子功能未使用，两个函数函数体相同
 NetManager::NetManager()
 {
+
+    epoll_acc_fd = epoll_create(MAXEPOLL); //!> create
+    epoll_out = epoll_create(MAXEPOLL);    //!> create
     keys = new KeyPair();
     uint8_t SK[32];
     uint8_t PK[64];
@@ -145,6 +152,11 @@ NetManager::NetManager()
 
     DHT = new DHTManager(*my, epoll_in);
     Union = new UnionManager(epoll_in);
+    Files = new StorageManager();
+    SendList = new sendlist(epoll_out);
+    Blocks = new BlockManager();
+
+    discovery();
 }
 //发送PBFT请求
 bool NetManager::sendPBFT(string msg)
@@ -246,112 +258,48 @@ void *callback_fr(void *args)
 {
     callback_n->FileReciever(p);
 }
-void *NetManager::reciver(void *args)
+
+int serv_sock(int port)
 {
-    msg_header header_recv;
-    int listener = listen_fd;
-    pthread_t th;
-    int wait_fds;
-    int fd_curr;
-    string ret;
-    struct epoll_event evs[MAXEPOLL];
-    //msg to be sent
-    msg msg_send;
-    //header to be sent (use it when you just send header)
-    msg_header s;
-    vector<PeerInfo *> uall;
-    PeerInfo *aim;
-    while (1)
+    struct sockaddr_in servaddr;
+    bzero(&servaddr, sizeof(servaddr));
+
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_port = htons(port);
+    int listen_fd;
+    //!> 建立套接字
+    if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        if ((wait_fds = epoll_wait(epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
-        {
-            printf("Epoll Wait Error : %d\n", errno);
-            exit(EXIT_FAILURE);
-        }
-        for (int i = 0; i < wait_fds; i++)
-        {
-            fd_curr = evs[i].data.fd;
-            recv_header(fd_curr, header_recv);
-            switch (header_recv.kind)
-            {
-            case DHT_FIND_NODE:
-            {
-                aim = new PeerInfo(header_recv.data[0], 0);
-                vector<PeerInfo *> nodes = DHT->Query(aim);
-                delete aim;
-                s.kind = DHT_RET;
-                //绑定公钥
-                s.pk[0] = keys->pk[0];
-                s.pk[1] = keys->pk[1];
-                //绑定数据内容
-                s.data[0] = header_recv.pk[0];
-                s.data[1] = header_recv.pk[1];
-                break;
-            }
-
-            case NK_PBFT_PRE:
-            {
-                s.kind = NK_PBFT_COM;
-                s.pk[0] = keys->pk[0];
-                s.pk[1] = keys->pk[1];
-                s.data[0] = header_recv.pk[0];
-                s.data[1] = header_recv.pk[1];
-                msg_send.header = s;
-                msg_send.msg = "";
-                SendList->new_msg(fd_curr, msg_send);
-                break;
-            }
-            case NK_PBFT_REQ:
-            {
-                uall = Union->getAll();
-                recv_content(fd_curr, msg_send.msg);
-                s.data[0] = header_recv.pk[0];
-                s.data[1] = header_recv.pk[1];
-                for (int i = 0; i < uall.size(); i++)
-                {
-                    s.kind = NK_PBFT_PPR;
-                    s.pk[0] = keys->pk[0];
-                    s.pk[1] = keys->pk[1];
-                    msg_send.header = s;
-                    SendList->new_msg(uall[i]->fd(), msg_send);
-                }
-                break;
-            }
-
-            case NK_PBFT_RES:
-                break;
-            case NK_PBFT_COM:
-            {
-            }
-            break;
-            case NK_PBFT_PPR:
-            {
-                uall = DHT->GetAllNode();
-                recv_content(fd_curr, msg_send.msg);
-                s.data[0] = header_recv.pk[0];
-                s.data[1] = header_recv.pk[1];
-                for (int i = 0; i < uall.size(); i++)
-                {
-                    s.kind = NK_PBFT_PRE;
-                    s.pk[0] = keys->pk[0];
-                    s.pk[1] = keys->pk[1];
-                    msg_send.header = s;
-                    SendList->new_msg(uall[i]->fd(), msg_send);
-                }
-                break;
-            }
-
-            case NK_SEND_FILE:
-                //验明身份
-                //接收文件
-                pthread_create(&th, NULL, callback_fr, NULL);
-                break;
-            default:
-                break;
-            }
-        }
+        printf("Socket Error...\n", errno);
+        exit(EXIT_FAILURE);
     }
+    //!> 设置非阻塞模式
+    //!>
+    if (setnonblocking(listen_fd) == -1)
+    {
+        printf("Setnonblocking Error : %d\n", errno);
+        exit(EXIT_FAILURE);
+    }
+
+    //!> 绑定
+    //!>
+    if (bind(listen_fd, (struct sockaddr *)&servaddr, sizeof(struct sockaddr)) == -1)
+    {
+        printf("Bind Error : %d\n", errno);
+        exit(EXIT_FAILURE);
+    }
+
+    //!> 监听
+    //!>
+    if (listen(listen_fd, MAXBACK) == -1)
+    {
+        printf("Listen Error : %d\n", errno);
+        exit(EXIT_FAILURE);
+    }
+    return listen_fd;
 }
+
 /*
     from hash.__BitNest._tcp.local 
     get hash host name
@@ -438,7 +386,7 @@ void NetManager::discovery()
         addr.sin_port = htons(PORT);
 
         int ret = connect(sockfd, (sockaddr *)&addr, sizeof(sockaddr));
-        cout << "connect:" << hex << iter->first << endl;
+        cout << "[discovery] connect:" << hex << iter->first << endl;
         msg_header h;
         h.pk[0] = keys->pk[0];
         h.pk[1] = keys->pk[1];
@@ -453,6 +401,10 @@ void NetManager::discovery()
             aim->pk[1] = h.pk[1];
             DHT->AddNode(aim);
         }
+        msg m;
+        m.header.kind = NK_NORMAL;
+        m.msg = "hello world";
+        send_msg(sockfd, m.header, m.msg);
         iter++;
     }
 }
@@ -462,6 +414,17 @@ void NetManager::discovery(PeerInfo *p)
 }
 void *NetManager::service_accept(void *arg)
 {
+    msg_header header_recv;
+    pthread_t th;
+    int fd_curr;
+    string ret;
+    //msg to be sent
+    msg msg_send;
+    //header to be sent (use it when you just send header)
+    msg_header s;
+    vector<PeerInfo *> uall;
+    PeerInfo *aim;
+    listen_fd = serv_sock(PORT);
     msg_header header;
     int conn_fd, nread;
     int wait_fds; //!> epoll_wait 的返回值
@@ -469,7 +432,6 @@ void *NetManager::service_accept(void *arg)
     char kind;
     string buffer;
     PeerInfo *connectPeer;
-    struct sockaddr_in servaddr;
     struct sockaddr_in cliaddr;
     struct epoll_event ev;
     struct epoll_event evs[MAXEPOLL];
@@ -486,48 +448,6 @@ void *NetManager::service_accept(void *arg)
         printf("Setrlimit Error : %d\n", errno);
         exit(EXIT_FAILURE);
     }
-
-    //!> server 套接口
-    //!>
-    bzero(&servaddr, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(PORT);
-
-    //!> 建立套接字
-    if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        printf("Socket Error...\n", errno);
-        exit(EXIT_FAILURE);
-    }
-
-    //!> 设置非阻塞模式
-    //!>
-    if (setnonblocking(listen_fd) == -1)
-    {
-        printf("Setnonblocking Error : %d\n", errno);
-        exit(EXIT_FAILURE);
-    }
-
-    //!> 绑定
-    //!>
-    if (bind(listen_fd, (struct sockaddr *)&servaddr, sizeof(struct sockaddr)) == -1)
-    {
-        printf("Bind Error : %d\n", errno);
-        exit(EXIT_FAILURE);
-    }
-
-    //!> 监听
-    //!>
-    if (listen(listen_fd, MAXBACK) == -1)
-    {
-        printf("Listen Error : %d\n", errno);
-        exit(EXIT_FAILURE);
-    }
-
-    //!> 创建epoll
-    //!>
-
     ev.events = EPOLLIN | EPOLLET; //!> accept Read!
     ev.data.fd = listen_fd;        //!> 将listen_fd 加入
     if (epoll_ctl(epoll_acc_fd, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
@@ -536,16 +456,23 @@ void *NetManager::service_accept(void *arg)
         exit(EXIT_FAILURE);
     }
     acc_cur_fds = 1;
-
+    bool first_run = true;
     while (1)
     {
-        if ((wait_fds = epoll_wait(epoll_acc_fd, evs, acc_cur_fds, -1)) == -1)
+        if ((wait_fds = epoll_wait(epoll_acc_fd, evs, MAXEPOLL, -1)) == -1)
         {
-            printf("Epoll Wait Error : %d\n", errno);
+            printf("Epoll Error : %d\n", errno);
             exit(EXIT_FAILURE);
+        }
+        if (first_run)
+        {
+            cout << "[accepter] running successfully" << endl;
+            first_run = false;
         }
         for (i = 0; i < wait_fds; i++)
         {
+
+            //接收连接
             if (evs[i].data.fd == listen_fd && acc_cur_fds < MAXEPOLL)
             {
                 if ((conn_fd = accept(listen_fd, (struct sockaddr *)&cliaddr, &len)) == -1)
@@ -561,33 +488,126 @@ void *NetManager::service_accept(void *arg)
                     exit(EXIT_FAILURE);
                 }
                 ++acc_cur_fds;
-                continue;
+                //recv_header中没有处理错误
             }
-            //recv_header中没有处理错误
-            kind = recv_header(evs[i].data.fd, header);
-
-            recv_content(evs[i].data.fd, buffer);
-
-            if (kind == DHT_CONNECT)
+            //处理消息
+            else
             {
-                uint256 PeerHash = uint256(buffer);
-                connectPeer = new PeerInfo(PeerHash, evs[i].data.fd);
-                connectPeer->pk[0] = header.pk[0];
-                connectPeer->pk[1] = header.pk[1];
-                header.pk[0] = keys->pk[0];
-                header.pk[1] = keys->pk[1];
-                header.kind = DHT_CONNECT;
-                header.msg_size = 0;
-                send_msg(evs[i].data.fd, header, "");
-                DHT->AddNode(connectPeer);
-                cout << "new connection:" << hex << PeerHash << endl;
-                //增加监听限制。
-                //目前的监听限制在DHT和Union中保护
-                //增加安全验证
-                epoll_ctl(epoll_in, EPOLL_CTL_ADD, evs[i].data.fd, &ev); //!> 计入FD
+                fd_curr = evs[i].data.fd;
+                recv_header(fd_curr, header_recv);
+                cout << "[accepter] new msg kind code:";
+                cout << header_recv.kind << endl;
+                switch (header_recv.kind)
+                {
+                case DHT_CONNECT:
+                {
+                    buffer.clear();
+                    recv_content(evs[i].data.fd, buffer);
+                    uint256 PeerHash = uint256(buffer);
+                    connectPeer = new PeerInfo(PeerHash, evs[i].data.fd);
+                    connectPeer->pk[0] = header.pk[0];
+                    connectPeer->pk[1] = header.pk[1];
+                    header.pk[0] = keys->pk[0];
+                    header.pk[1] = keys->pk[1];
+                    header.kind = DHT_CONNECT;
+                    header.msg_size = 0;
+                    send_msg(evs[i].data.fd, header, "");
+                    DHT->AddNode(connectPeer);
+                    cout << "[accepter] new connection:" << hex << PeerHash << endl;
+                    //增加监听限制。
+                    //目前的监听限制在DHT和Union中保护
+                    //增加安全验证
+                    break;
+                }
+                case DHT_FIND_NODE:
+                {
+                    aim = new PeerInfo(header_recv.data[0], 0);
+                    vector<PeerInfo *> nodes = DHT->Query(aim);
+                    delete aim;
+                    s.kind = DHT_RET;
+                    //绑定公钥
+                    s.pk[0] = keys->pk[0];
+                    s.pk[1] = keys->pk[1];
+                    //绑定数据内容
+                    s.data[0] = header_recv.pk[0];
+                    s.data[1] = header_recv.pk[1];
+                    break;
+                }
 
-                epoll_ctl(epoll_acc_fd, EPOLL_CTL_DEL, evs[i].data.fd, &ev); //!> 删除计入的fd
-                --acc_cur_fds;
+                case NK_PBFT_PRE:
+                {
+                    s.kind = NK_PBFT_COM;
+                    s.pk[0] = keys->pk[0];
+                    s.pk[1] = keys->pk[1];
+                    s.data[0] = header_recv.pk[0];
+                    s.data[1] = header_recv.pk[1];
+                    msg_send.header = s;
+                    msg_send.msg = "";
+                    SendList->new_msg(fd_curr, msg_send);
+                    break;
+                }
+                case NK_PBFT_REQ:
+                {
+                    uall = Union->getAll();
+                    recv_content(fd_curr, msg_send.msg);
+                    s.data[0] = header_recv.pk[0];
+                    s.data[1] = header_recv.pk[1];
+                    for (int i = 0; i < uall.size(); i++)
+                    {
+                        s.kind = NK_PBFT_PPR;
+                        s.pk[0] = keys->pk[0];
+                        s.pk[1] = keys->pk[1];
+                        msg_send.header = s;
+                        SendList->new_msg(uall[i]->fd(), msg_send);
+                    }
+                    break;
+                }
+
+                case NK_PBFT_RES:
+                    break;
+                case NK_PBFT_COM:
+                {
+                }
+                break;
+                case NK_PBFT_PPR:
+                {
+                    uall = DHT->GetAllNode();
+                    recv_content(fd_curr, msg_send.msg);
+                    s.data[0] = header_recv.pk[0];
+                    s.data[1] = header_recv.pk[1];
+                    for (int i = 0; i < uall.size(); i++)
+                    {
+                        s.kind = NK_PBFT_PRE;
+                        s.pk[0] = keys->pk[0];
+                        s.pk[1] = keys->pk[1];
+                        msg_send.header = s;
+                        SendList->new_msg(uall[i]->fd(), msg_send);
+                    }
+                    break;
+                }
+
+                case NK_SEND_FILE:
+                    //验明身份
+                    //接收文件
+                    pthread_create(&th, NULL, callback_fr, NULL);
+                    break;
+                case NK_OFFLINE:
+                {
+                    --acc_cur_fds;
+                    cout << "[reciver] offlie node detected" << endl;
+                    aim = new PeerInfo(0, fd_curr);
+                    DHT->DelNode(aim);
+                    Union->Offline(aim);
+                    break;
+                }
+                case NK_NORMAL:
+                {
+                    recv_content(fd_curr, ret);
+                    cout << "[reciver] normal msg: " << ret << endl;
+                }
+                default:
+                    break;
+                }
             }
         }
     }
@@ -617,10 +637,7 @@ void *accept_callback(void *arg)
 {
     callback_n->service_accept(arg);
 }
-void *reciever_callback(void *arg)
-{
-    callback_n->service_accept(arg);
-}
+
 void *sender_callback(void *arg)
 {
     callback_n->sender(arg);
@@ -628,13 +645,19 @@ void *sender_callback(void *arg)
 void NetManager::deamon()
 {
     callback_n = this;
-    pthread_t threads[5];
-    pthread_create(&threads[4], 0, sender_callback, NULL);
-    pthread_create(&threads[0], 0, union_callback, NULL);
-    pthread_create(&threads[1], 0, net_callback, NULL);
+    pthread_t threads[7];
     pthread_create(&threads[2], 0, mdns_callback, NULL);
+    cout << "[mdns] running" << endl;
     pthread_create(&threads[3], 0, accept_callback, NULL);
-    pthread_create(&threads[4], 0, reciever_callback, NULL);
+    cout << "[accept] running" << endl;
+    // pthread_create(&threads[4], 0, reciever_callback, NULL);
+    // cout << "[reciever] running" << endl;
+    pthread_create(&threads[0], 0, union_callback, NULL);
+    cout << "[union] running" << endl;
+    // pthread_create(&threads[1], 0, net_callback, NULL);
+    // cout << "[net] running" << endl;
+    pthread_create(&threads[5], 0, sender_callback, NULL);
+    cout << "[sender] running" << endl;
     while (1)
         ;
 }
@@ -643,6 +666,7 @@ void *NetManager::service_net(void *args)
 {
     while (1)
     {
+        cout << "there" << endl;
         //维护PBFT准备
         //维护PBFT请求
         sleep(1);
@@ -718,7 +742,7 @@ void NetManager::Emit(msg_header &h, string msg)
     int wait_fds;
     while (1)
     {
-        if ((wait_fds = epoll_wait(epoll_emit, evs, acc_cur_fds, -1)) == -1)
+        if ((wait_fds = epoll_wait(epoll_emit, evs, MAXEPOLL, -1)) == -1)
         {
             printf("Epoll Wait Error : %d\n", errno);
             exit(EXIT_FAILURE);
@@ -865,12 +889,18 @@ void *NetManager::sender(void *args)
         ev.data.fd = fds[i];
         epoll_ctl(epoll_out, EPOLL_CTL_ADD, fds[i], &ev);
     }
+    bool flg = true;
     while (1)
     {
-        if ((wait_fds = epoll_wait(epoll_out, evs, acc_cur_fds, -1)) == -1)
+        if ((wait_fds = epoll_wait(epoll_out, evs, MAXEPOLL, -1)) == -1)
         {
             printf("Epoll Wait Error : %d\n", errno);
             exit(EXIT_FAILURE);
+        }
+        if (flg)
+        {
+            cout << "[send] running successfully" << endl;
+            flg = false;
         }
         for (int i = 0; i < wait_fds; i++)
         {
@@ -881,6 +911,143 @@ void *NetManager::sender(void *args)
                 //失败错误未检测
                 send_msg(curr_fd, msgs[i].header, msgs[i].msg);
             }
+            epoll_ctl(epoll_out, EPOLL_CTL_DEL, curr_fd, &evs[i]);
         }
     }
 }
+// old modulus
+//
+//
+//
+//
+//
+//
+//
+//
+// void *reciever_callback(void *arg)
+// {
+//     callback_n->reciver(arg);
+// }
+//
+// void *NetManager::reciver(void *args)
+// {
+
+//     msg_header header_recv;
+//     int listener = sock_in_fd;
+//     pthread_t th;
+//     int wait_fds;
+//     int fd_curr;
+//     string ret;
+//     struct epoll_event evs[MAXEPOLL];
+//     //msg to be sent
+//     msg msg_send;
+//     //header to be sent (use it when you just send header)
+//     msg_header s;
+//     vector<PeerInfo *> uall;
+//     PeerInfo *aim;
+//     while (1)
+//     {
+//         if ((wait_fds = epoll_wait(epoll_in, evs, MAXEPOLL, -1)) == -1)
+//         {
+//             printf("Epoll Wait Error : %d\n", errno);
+//             exit(EXIT_FAILURE);
+//         }
+//         cout << "[reciver] new message coming ";
+//         for (int i = 0; i < wait_fds; i++)
+//         {
+//             fd_curr = evs[i].data.fd;
+//             recv_header(fd_curr, header_recv);
+//             cout << header_recv.kind << endl;
+//             switch (header_recv.kind)
+//             {
+//             case DHT_FIND_NODE:
+//             {
+//                 aim = new PeerInfo(header_recv.data[0], 0);
+//                 vector<PeerInfo *> nodes = DHT->Query(aim);
+//                 delete aim;
+//                 s.kind = DHT_RET;
+//                 //绑定公钥
+//                 s.pk[0] = keys->pk[0];
+//                 s.pk[1] = keys->pk[1];
+//                 //绑定数据内容
+//                 s.data[0] = header_recv.pk[0];
+//                 s.data[1] = header_recv.pk[1];
+//                 break;
+//             }
+
+//             case NK_PBFT_PRE:
+//             {
+//                 s.kind = NK_PBFT_COM;
+//                 s.pk[0] = keys->pk[0];
+//                 s.pk[1] = keys->pk[1];
+//                 s.data[0] = header_recv.pk[0];
+//                 s.data[1] = header_recv.pk[1];
+//                 msg_send.header = s;
+//                 msg_send.msg = "";
+//                 SendList->new_msg(fd_curr, msg_send);
+//                 break;
+//             }
+//             case NK_PBFT_REQ:
+//             {
+//                 uall = Union->getAll();
+//                 recv_content(fd_curr, msg_send.msg);
+//                 s.data[0] = header_recv.pk[0];
+//                 s.data[1] = header_recv.pk[1];
+//                 for (int i = 0; i < uall.size(); i++)
+//                 {
+//                     s.kind = NK_PBFT_PPR;
+//                     s.pk[0] = keys->pk[0];
+//                     s.pk[1] = keys->pk[1];
+//                     msg_send.header = s;
+//                     SendList->new_msg(uall[i]->fd(), msg_send);
+//                 }
+//                 break;
+//             }
+
+//             case NK_PBFT_RES:
+//                 break;
+//             case NK_PBFT_COM:
+//             {
+//             }
+//             break;
+//             case NK_PBFT_PPR:
+//             {
+//                 uall = DHT->GetAllNode();
+//                 recv_content(fd_curr, msg_send.msg);
+//                 s.data[0] = header_recv.pk[0];
+//                 s.data[1] = header_recv.pk[1];
+//                 for (int i = 0; i < uall.size(); i++)
+//                 {
+//                     s.kind = NK_PBFT_PRE;
+//                     s.pk[0] = keys->pk[0];
+//                     s.pk[1] = keys->pk[1];
+//                     msg_send.header = s;
+//                     SendList->new_msg(uall[i]->fd(), msg_send);
+//                 }
+//                 break;
+//             }
+
+//             case NK_SEND_FILE:
+//                 //验明身份
+//                 //接收文件
+//                 pthread_create(&th, NULL, callback_fr, NULL);
+//                 break;
+//             case NK_OFFLINE:
+//             {
+//                 cout << "[reciver] offlie node detected" << endl;
+//                 aim = new PeerInfo(0, fd_curr);
+//                 DHT->DelNode(aim);
+//                 Union->Offline(aim);
+//                 break;
+//             }
+//             case NK_NORMAL:
+//             {
+//                 recv_content(fd_curr, ret);
+//                 cout << "[reciver] normal msg: " << ret << endl;
+//             }
+//             default:
+//                 break;
+//             }
+//         }
+//     }
+// }

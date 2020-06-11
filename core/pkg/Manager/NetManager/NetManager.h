@@ -17,6 +17,7 @@
 using namespace std;
 
 string get_ip_from_fd(int fd);
+int serv_sock(int port);
 class NetManager
 {
 private:
@@ -67,7 +68,7 @@ public:
     //P2P服务
     void *AddEventIn(void *arg);
     void *sender(void *args);
-    void *reciver(void *args);
+
     void *service_accept(void *args);
     void *service_nmdns(void *args);
     void *service_net(void *args);
@@ -87,5 +88,7 @@ public:
 
     //合同同步
     void contract_sync();
+
+    // void *reciver(void *args);
 };
 #endif
