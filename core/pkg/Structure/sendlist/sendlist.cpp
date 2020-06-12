@@ -84,7 +84,6 @@ sendlist::~sendlist()
 
 vector<int> sendlist::get_fd()
 {
-    lock_p(sem_lock);
     vector<int> ans;
     map<int, vector<msg>>::iterator iter = list_msg.begin();
     while (iter != list_msg.end())
@@ -96,6 +95,5 @@ vector<int> sendlist::get_fd()
         }
         iter++;
     }
-    lock_v(sem_lock);
     return ans;
 }

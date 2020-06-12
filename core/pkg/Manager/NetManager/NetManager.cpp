@@ -99,6 +99,7 @@ NetManager::NetManager()
 
     epoll_acc_fd = epoll_create(MAXEPOLL); //!> create
     epoll_out = epoll_create(MAXEPOLL);    //!> create
+    epoll_in = epoll_acc_fd;
     keys = new KeyPair();
     uint8_t SK[32];
     uint8_t PK[64];
@@ -243,6 +244,7 @@ void *file_send_callback(void *args)
     param[0] = 3;
     param[1] = pthread_self();
     param[2] = sock;
+
     pthread_create(&timer, NULL, time_out_callback, (void *)param);
     ser_sock = connect(sock, (sockaddr *)&ser_addr, len);
     pthread_detach(timer);
@@ -372,6 +374,8 @@ void NetManager::discovery()
         }
     }
     map<uint256, string>::iterator iter = findings.begin();
+
+    cout << "[discovery] begin" << endl;
     while (iter != findings.end())
     {
         uint256 hash_num(iter->first);
@@ -404,9 +408,10 @@ void NetManager::discovery()
         msg m;
         m.header.kind = NK_NORMAL;
         m.msg = "hello world";
-        send_msg(sockfd, m.header, m.msg);
+        SendList->new_msg(sockfd, m);
         iter++;
     }
+    cout << "[discovery] finished" << endl;
 }
 //使用种子对节点初始化
 void NetManager::discovery(PeerInfo *p)
@@ -414,6 +419,7 @@ void NetManager::discovery(PeerInfo *p)
 }
 void *NetManager::service_accept(void *arg)
 {
+    cout << "[accepter] initiating ... " << endl;
     msg_header header_recv;
     pthread_t th;
     int fd_curr;
@@ -564,11 +570,13 @@ void *NetManager::service_accept(void *arg)
                 }
 
                 case NK_PBFT_RES:
+                {
                     break;
+                }
                 case NK_PBFT_COM:
                 {
+                    break;
                 }
-                break;
                 case NK_PBFT_PPR:
                 {
                     uall = DHT->GetAllNode();
@@ -587,11 +595,20 @@ void *NetManager::service_accept(void *arg)
                 }
 
                 case NK_SEND_FILE:
+                {
                     //验明身份
                     //接收文件
                     pthread_create(&th, NULL, callback_fr, NULL);
                     break;
-                case NK_OFFLINE:
+                }
+
+                case NK_NORMAL:
+                {
+                    recv_content(fd_curr, ret);
+                    cout << "[reciver] normal msg: " << ret << endl;
+                    break;
+                }
+                default:
                 {
                     --acc_cur_fds;
                     cout << "[reciver] offlie node detected" << endl;
@@ -600,13 +617,6 @@ void *NetManager::service_accept(void *arg)
                     Union->Offline(aim);
                     break;
                 }
-                case NK_NORMAL:
-                {
-                    recv_content(fd_curr, ret);
-                    cout << "[reciver] normal msg: " << ret << endl;
-                }
-                default:
-                    break;
                 }
             }
         }
@@ -618,11 +628,14 @@ void *NetManager::service_nmdns(void *arg)
 {
     int service_port = 42424;
     int ret;
+
+    cout << "[mdns] initiating.." << endl;
     ret = service_mdns(hostname.c_str(), service.c_str(), service_port);
 }
 
 void *union_callback(void *arg)
 {
+    cout << "[UnionManager] initiating ..." << endl;
     callback_n->service_union(arg);
 }
 void *net_callback(void *arg)
@@ -647,23 +660,20 @@ void NetManager::deamon()
     callback_n = this;
     pthread_t threads[7];
     pthread_create(&threads[2], 0, mdns_callback, NULL);
-    cout << "[mdns] running" << endl;
     pthread_create(&threads[3], 0, accept_callback, NULL);
-    cout << "[accept] running" << endl;
     // pthread_create(&threads[4], 0, reciever_callback, NULL);
     // cout << "[reciever] running" << endl;
     pthread_create(&threads[0], 0, union_callback, NULL);
-    cout << "[union] running" << endl;
     // pthread_create(&threads[1], 0, net_callback, NULL);
     // cout << "[net] running" << endl;
     pthread_create(&threads[5], 0, sender_callback, NULL);
-    cout << "[sender] running" << endl;
     while (1)
         ;
 }
 
 void *NetManager::service_net(void *args)
 {
+    cout << "[NetManager] NetManager initiating.." << endl;
     while (1)
     {
         cout << "there" << endl;
@@ -877,11 +887,12 @@ void NetManager::FileSender(PeerInfo *p, StorageData &file)
 
 void *NetManager::sender(void *args)
 {
+    cout << "[sender] running steady" << endl;
     int wait_fds;
     struct epoll_event ev;
     struct epoll_event evs[MAXEPOLL];
     vector<int> fds = SendList->get_fd();
-    ev.events = EPOLLOUT || EPOLLET;
+    ev.events = EPOLLOUT;
     int curr_fd;
     vector<msg> msgs;
     for (int i = 0; i < fds.size(); ++i)
@@ -892,6 +903,7 @@ void *NetManager::sender(void *args)
     bool flg = true;
     while (1)
     {
+
         if ((wait_fds = epoll_wait(epoll_out, evs, MAXEPOLL, -1)) == -1)
         {
             printf("Epoll Wait Error : %d\n", errno);
@@ -908,6 +920,7 @@ void *NetManager::sender(void *args)
             msgs = SendList->msg_of(curr_fd);
             for (int i = 0; i < msgs.size(); i++)
             {
+                cout << "[sender] send packet " << msgs[i].header.kind << " to fd " << curr_fd << endl;
                 //失败错误未检测
                 send_msg(curr_fd, msgs[i].header, msgs[i].msg);
             }

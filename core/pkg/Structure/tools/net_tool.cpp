@@ -140,6 +140,7 @@ char recv_header(int sockfd, msg_header &h)
     int r = recv(sockfd, buffer, 134, 0);
     if (r == 0 && errno == EAGAIN)
     {
+        cout << "[net tools] node offline" << endl;
         h.kind = NK_OFFLINE;
     }
     else
